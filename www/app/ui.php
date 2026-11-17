@@ -271,9 +271,24 @@ function ui_list(array $q): string
             $from = (string)($pl['from'] ?? '');
             $body = (string)($pl['body'] ?? '');
             if ($body === '' && !empty($pl['html'])) { $body = '[HTML-письмо]'; }
+            // сегмент аудитории: из generated-колонки, а если пусто — из payload
+            $audId = (string)($r['audience_id'] ?? '');
+            $audName = (string)($r['audience_name'] ?? '');
+            if ($audId === '' && is_array($pl['audience'] ?? null)) {
+                $audId = (string)($pl['audience']['id'] ?? '');
+                $audName = (string)($pl['audience']['name'] ?? '');
+            }
+            $audHtml = '';
+            if ($audId !== '' || $audName !== '') {
+                $audLabel = $audName !== '' ? $audName : $audId;
+                if ($audName !== '' && $audId !== '') { $audLabel .= ' (' . $audId . ')'; }
+                $audHtml = '<div class="hp-row"><span class="hp-k">Сегмент</span><span class="hp-v">' . e($audLabel) . '</span></div>';
+            }
+
             $preview = '<div class="hp-row"><span class="hp-k">От</span><span class="hp-v">' . e($from) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Кому</span><span class="hp-v">' . e($to) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Тема</span><span class="hp-v hp-subj">' . e($subj) . '</span></div>'
+                . $audHtml
                 . '<div class="hp-body">' . nl2br(e($body)) . '</div>';
             $hoverAttr = ' data-hover="' . e($preview) . '"';
         }
