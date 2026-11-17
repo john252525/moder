@@ -68,8 +68,10 @@ function ui_handle(string $method, string $path, array $query, array $post): nev
             echo ui_list($query); exit;
         case preg_match('#^/item/([0-9a-f-]{36})$#', $path, $m):
             echo ui_item($m[1]); exit;
-        case preg_match('#^/item/([0-9a-f-]{36})/(approve|reject)$#', $path, $m) && $method === 'POST':
+        case preg_match('#^/item/([0-9a-f-]{36})/(approve|reject|revoke)$#', $path, $m) && $method === 'POST':
             ui_action($m[1], $m[2], $post); exit;
+        case $path === '/bulk' && $method === 'POST':
+            ui_bulk($post); exit;
         case $path === '/stats':
             echo ui_stats(); exit;
         default:
@@ -101,6 +103,22 @@ function ui_action(string $id, string $action, array $post): void
 {
     $item = fetch_item($id);
     $actor = 'moder-ui';
+
+    if ($action === 'revoke') {
+        if ($item['status'] !== 'approved') {
+            flash('Отозвать можно только одобренное (не применённое) задание');
+            header("Location: /item/$id"); exit;
+        }
+        db()->prepare("UPDATE moderation_queue SET status='pending', reviewed_by=NULL, reviewed_at=NULL, claimed_at=NULL WHERE id=? AND status='approved'")->execute([$id]);
+        log_event($id, $actor, 'revoked', 'одобрение отозвано');
+        if ($item['claimed_at'] !== null) {
+            flash('Внимание: задание уже было взято воркером — отозвано, но проверьте дубли');
+        } else {
+            flash('Одобрение отозвано, задание вернулось на модерацию');
+        }
+        header("Location: /item/$id"); exit;
+    }
+
     if ($action === 'approve') {
         if ($item['status'] !== 'pending') { flash('Запись уже обработана'); header("Location: /item/$id"); exit; }
         db()->prepare("UPDATE moderation_queue SET status='approved', reviewed_by=?, reviewed_at=NOW() WHERE id=? AND status='pending'")->execute([$actor, $id]);
@@ -122,26 +140,83 @@ function flash(?string $msg = null): ?string
     $m = $_SESSION['flash'] ?? null; unset($_SESSION['flash']); return $m;
 }
 
+/**
+ * Массовые действия над выбранными записями (approve/reject).
+ * Работаем только с pending — остальные молча пропускаем и сообщаем в flash.
+ */
+function ui_bulk(array $post): void
+{
+    $rawIds = $post['ids'] ?? [];
+    if (!is_array($rawIds)) { $rawIds = []; }
+    $ids = [];
+    foreach ($rawIds as $v) {
+        if (is_string($v) && preg_match('/^[0-9a-f-]{36}$/', $v)) { $ids[] = $v; }
+    }
+    $ids = array_values(array_unique($ids));
+    if ($ids === []) {
+        flash('Ничего не выбрано');
+        header('Location: /'); exit;
+    }
+
+    $action = (string)($post['action'] ?? 'approve');
+    $comment = trim((string)($post['comment'] ?? ''));
+    $reason = trim((string)($post['rejection_reason'] ?? ''));
+    $actor = 'moder-ui';
+
+    if ($action === 'reject' && $reason === '') {
+        flash('Для массового отказа нужна причина');
+        header('Location: /'); exit;
+    }
+
+    $pdo = db();
+    $done = 0;
+    $skipped = 0;
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $pdo->beginTransaction();
+    try {
+        if ($action === 'approve') {
+            $st = $pdo->prepare("UPDATE moderation_queue SET status='approved', reviewed_by=?, reviewed_at=NOW() WHERE status='pending' AND id IN ($in)");
+            $st->execute(array_merge([$actor], $ids));
+            $done = $st->rowCount();
+            foreach ($ids as $id) { log_event($id, $actor, 'approved_bulk', $comment !== '' ? $comment : null); }
+        } else {
+            $st = $pdo->prepare("UPDATE moderation_queue SET status='rejected', reviewed_by=?, reviewed_at=NOW(), rejection_reason=? WHERE status='pending' AND id IN ($in)");
+            $st->execute(array_merge([$actor, $reason], $ids));
+            $done = $st->rowCount();
+            foreach ($ids as $id) { log_event($id, $actor, 'rejected_bulk', $reason); }
+        }
+        $skipped = count($ids) - $done;
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        flash('Ошибка массового действия: ' . $e->getMessage());
+        header('Location: /'); exit;
+    }
+
+    $verb = $action === 'approve' ? 'одобрено' : 'отклонено';
+    $msg = "{$verb}: {$done}";
+    if ($skipped > 0) { $msg .= " (пропущено {$skipped} — уже обработаны)"; }
+    flash($msg);
+    header('Location: /'); exit;
+}
+
 function ui_list(array $q): string
 {
     if (!isset($q['status']) || $q['status'] === '') {
-        $q['status'] = 'pending'; // дефолтный фильтр для UI
+        $q['status'] = 'pending';
     }
     [$where, $args] = build_filters($q, 'moder');
     [$total, $rows] = query_items($where, $args, $q);
 
-    // Значения фильтров
     $fStatus = (string)($q['status'] ?? 'pending');
     $fProject = (string)($q['project'] ?? '');
     $fType = (string)($q['type'] ?? '');
     $fAgent = (string)($q['agent_name'] ?? '');
     $fQ = (string)($q['q'] ?? '');
 
-    // Справочники
     $projects = db()->query('SELECT DISTINCT project FROM moderation_queue ORDER BY project')->fetchAll(PDO::FETCH_COLUMN);
     $agents = db()->query('SELECT DISTINCT agent_name FROM moderation_queue ORDER BY agent_name')->fetchAll(PDO::FETCH_COLUMN);
 
-    // Счётчики по статусам
     $counts = db()->query("SELECT status, COUNT(*) c FROM moderation_queue GROUP BY status")->fetchAll();
     $cnt = array_column($counts, 'c', 'status');
 
@@ -164,27 +239,69 @@ function ui_list(array $q): string
         '' => 'Все',
     ];
 
+    $hoverOn = (bool)(cfg('ui')['email_hover'] ?? true);
+
     $rowsHtml = '';
+    $hoverHtml = '';
     foreach ($rows as $r) {
+        $id = (string)$r['id'];
         $tl = cfg('type_labels')[$r['type']] ?? $r['type'];
         $badge = status_badge($r['status']);
-        $rowsHtml .= '<tr onclick="location.href=\'/item/' . e($r['id']) . '\'" class="row">';
+        $canReview = $r['status'] === 'pending';
+
+        // чекбокс (только для pending — остальные не выбираются)
+        $cb = $canReview
+            ? '<input type="checkbox" class="rowcb" name="ids" value="' . e($id) . '" form="bulkForm" onclick="event.stopPropagation()">'
+            : '<span class="muted">—</span>';
+
+        // hover-превью для email
+        $hoverAttr = '';
+        if ($hoverOn && $r['type'] === 'email') {
+            $pl = json_decode((string)$r['payload'], true) ?: [];
+            $to = is_array($pl['to'] ?? null) ? implode(', ', array_map('strval', $pl['to'])) : '';
+            $subj = (string)($pl['subject'] ?? '');
+            $from = (string)($pl['from'] ?? '');
+            $body = (string)($pl['body'] ?? '');
+            if ($body === '' && !empty($pl['html'])) { $body = '[HTML-письмо]'; }
+            $preview = '<div class="hp-row"><span class="hp-k">От</span><span class="hp-v">' . e($from) . '</span></div>'
+                . '<div class="hp-row"><span class="hp-k">Кому</span><span class="hp-v">' . e($to) . '</span></div>'
+                . '<div class="hp-row"><span class="hp-k">Тема</span><span class="hp-v hp-subj">' . e($subj) . '</span></div>'
+                . '<div class="hp-body">' . nl2br(e($body)) . '</div>';
+            $hoverAttr = ' data-hover="' . e($preview) . '"';
+        }
+
+        $quick = '';
+        if ($canReview) {
+            $quick = '<div class="quick" onclick="event.stopPropagation()">'
+                . '<form method="post" action="/item/' . e($id) . '/approve" style="display:inline">'
+                . '<button class="qbtn q-ok" title="Одобрить" type="submit">✓</button></form>'
+                . '<button class="qbtn q-no" title="Отклонить" type="button" onclick="quickReject(\'' . e($id) . '\')">✗</button>'
+                . '</div>';
+        } elseif ($r['status'] === 'approved') {
+            $quick = '<div class="quick" onclick="event.stopPropagation()">'
+                . '<form method="post" action="/item/' . e($id) . '/revoke" style="display:inline" onsubmit="return confirm(\'Отозвать одобрение?\')">'
+                . '<button class="qbtn q-rev" title="Отозвать одобрение" type="submit">↺</button></form>'
+                . '</div>';
+        }
+
+        $rowsHtml .= '<tr class="row' . ($canReview ? ' row-pending' : '') . '" onclick="location.href=\'/item/' . e($id) . '\'"' . $hoverAttr . '>';
+        $rowsHtml .= '<td class="cbcell">' . $cb . '</td>';
         $rowsHtml .= '<td>' . $badge . '</td>';
         $rowsHtml .= '<td><span class="tag">' . e($tl) . '</span></td>';
-        $rowsHtml .= '<td><div class="ttl">' . e($r['title']) . '</div><div class="muted small">' . e(mb_substr($r['reason'], 0, 140)) . (mb_strlen($r['reason']) > 140 ? '…' : '') . '</div></td>';
+        $rowsHtml .= '<td><div class="ttl">' . e($r['title']) . '</div><div class="muted small">' . e(mb_substr($r['reason'], 0, 130)) . (mb_strlen($r['reason']) > 130 ? '…' : '') . '</div></td>';
         $rowsHtml .= '<td>' . e($r['project']) . '</td>';
         $rowsHtml .= '<td>' . e($r['agent_name']) . '</td>';
         $rowsHtml .= '<td class="muted small nowrap">' . e($r['created_at']) . '</td>';
+        $rowsHtml .= '<td class="qcell">' . $quick . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
-        $rowsHtml = '<tr><td colspan="6" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
+        $rowsHtml = '<tr><td colspan="8" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
     }
 
     $fl = flash();
     $flash = $fl !== null ? '<div class="flash">' . e($fl) . '</div>' : '';
 
-    // Пагинация
     $limit = (int)($q['limit'] ?? 50);
     $offset = (int)($q['offset'] ?? 0);
     $qs = $_GET; unset($qs['offset']);
@@ -197,7 +314,7 @@ function ui_list(array $q): string
 
     $countChip = static function (string $k, string $label) use ($cnt): string {
         $c = $k === '' ? array_sum($cnt) : (int)($cnt[$k] ?? 0);
-        return '<span class="chip">' . e($label) . ' <b>' . $c . '</b></span>';
+        return '<a class="chip" href="/?status=' . e($k) . '">' . e($label) . ' <b>' . $c . '</b></a>';
     };
 
     $chipsHtml = $countChip('pending','На модерации') . $countChip('approved','Одобрено') . $countChip('applied','Применено') . $countChip('rejected','Отклонено') . $countChip('failed','Ошибки');
@@ -206,6 +323,24 @@ function ui_list(array $q): string
     $typeOptsHtml = $opt(cfg('types'), $fType, 'Тип: все');
     $agentOptsHtml = $opt($agents, $fAgent, 'Агент: все');
 
+    // hover-модалка и bulk-панель (рендерятся всегда, показываются через JS)
+    $hoverModal = '<div id="hoverCard" class="hovercard" hidden></div>';
+
+    $bulkPanel = <<<'BULK'
+<form id="bulkForm" method="post" action="/bulk" class="bulkbar" hidden>
+  <div class="bb-left">
+    <span class="bb-count" id="bbCount">0</span> выбрано
+    <button type="button" class="btn-ghost bb-clear" onclick="clearSel()">снять</button>
+  </div>
+  <div class="bb-right">
+    <input type="text" name="comment" placeholder="комментарий к одобрению (необязательно)">
+    <button type="submit" name="action" value="approve" class="btn-ok bb-btn">✓ Одобрить выбранные</button>
+    <input type="text" name="rejection_reason" placeholder="причина отказа (для отклонения)">
+    <button type="submit" name="action" value="reject" class="btn-no bb-btn" onclick="return bulkRejectCheck()">✗ Отклонить</button>
+  </div>
+</form>
+BULK;
+
     $content = <<<HTML
 <div class="toolbar">
   <div class="chips">{$chipsHtml}</div>
@@ -213,9 +348,7 @@ function ui_list(array $q): string
 {$flash}
 <form class="filters" method="get" action="/">
   <input type="search" name="q" placeholder="Поиск по заголовку, причине…" value="{$fQ}">
-  <select name="status">
-    {$statusOptsHtml}
-  </select>
+  <select name="status">{$statusOptsHtml}</select>
   <select name="project">{$projectOptsHtml}</select>
   <select name="type">{$typeOptsHtml}</select>
   <select name="agent_name">{$agentOptsHtml}</select>
@@ -223,10 +356,17 @@ function ui_list(array $q): string
   <a class="btn-ghost" href="/">Сброс</a>
 </form>
 <table class="tbl">
-  <thead><tr><th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th></tr></thead>
-  <tbody>{$rowsHtml}</tbody>
+  <thead><tr>
+    <th class="cbcell"><input type="checkbox" id="selAll" title="Выделить все" onclick="toggleAll(this)"></th>
+    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th></th>
+  </tr></thead>
+  <tbody id="rows">{$rowsHtml}</tbody>
 </table>
 {$pager}
+{$bulkPanel}
+{$hoverModal}
+<!-- отдельная форма отклонения для быстрых кнопок -->
+<form id="quickRejectForm" method="post" action="" hidden></form>
 HTML;
     return layout('Очередь модерации', $content, true);
 }
@@ -292,6 +432,10 @@ HTML;
             : 'Одобрено: ' . e((string)$r['reviewed_at']) . ' · ждёт devops-воркер';
         $actions = '<div class="notice notice-ok">' . $info . '</div>';
         if ($r['apply_error']) { $actions .= '<div class="notice notice-warn">Последняя ошибка: ' . e((string)$r['apply_error']) . '</div>'; }
+        if ($r['status'] === 'approved') {
+            $actions .= '<form method="post" action="/item/' . e($id) . '/revoke" class="act" onsubmit="return confirm(\'Отозвать одобрение и вернуть на модерацию?\')">'
+                . '<button class="btn-rev" type="submit">↺ Отозвать одобрение</button></form>';
+        }
     } elseif ($r['status'] === 'failed') {
         $actions = '<div class="notice notice-warn">Не удалось применить: ' . e((string)$r['apply_error']) . '</div>';
     }
@@ -400,7 +544,7 @@ button:hover{filter:brightness(1.1)}
 .act{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .act input,.act textarea{background:#12151c;border:1px solid var(--br);color:var(--txt);border-radius:9px;padding:9px 12px;font:inherit;width:100%}
 .act textarea{min-height:90px;resize:vertical}
-.btn-ok{background:#16a34a}.btn-no{background:#dc2626}
+.btn-ok{background:#16a34a}.btn-no{background:#dc2626}.btn-rev{background:#b45309;width:100%}
 .notice{padding:10px 14px;border-radius:10px;font-size:14px;margin-bottom:10px}
 .notice-ok{background:#12341f;border:1px solid #255b39;color:#a7f3c9}
 .notice-no{background:#3a1414;border:1px solid #6b2b2b;color:#fecaca}
@@ -431,6 +575,37 @@ button:hover{filter:brightness(1.1)}
 .creatives{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
 .creative{max-width:300px;max-height:250px;border-radius:8px;border:1px solid var(--br)}
 .mt{margin-top:12px}
+
+/* --- список: чекбоксы, быстрые действия, bulk, hover --- */
+.cbcell{width:36px;text-align:center}
+.ttl{font-weight:600;margin-bottom:2px}
+.row-pending:hover{background:#1b2029}
+.qcell{width:88px;white-space:nowrap;text-align:right}
+.quick{display:inline-flex;gap:6px}
+.qbtn{border:none;border-radius:7px;width:30px;height:30px;font-size:15px;cursor:pointer;color:#fff;line-height:1}
+.q-ok{background:#16a34a}.q-no{background:#dc2626}.q-rev{background:#b45309}
+.qbtn:hover{filter:brightness(1.15)}
+/* bulk bar */
+.bulkbar{position:sticky;bottom:0;z-index:30;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+  background:#171a21;border:1px solid var(--br);border-radius:12px;padding:12px 16px;margin-top:16px;box-shadow:0 -4px 20px rgba(0,0,0,.35)}
+.bulkbar[hidden]{display:none}
+.bb-left{color:var(--mut);font-size:14px;display:flex;align-items:center;gap:10px}
+.bb-count{display:inline-block;min-width:26px;text-align:center;background:#2563eb;color:#fff;border-radius:999px;padding:1px 8px;font-weight:700}
+.bb-right{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bb-right input[type=text]{background:#12151c;border:1px solid var(--br);color:var(--txt);border-radius:9px;padding:8px 12px;font:inherit;min-width:200px}
+.bb-btn{white-space:nowrap}
+.bb-clear{padding:5px 10px;font-size:13px}
+/* hover card */
+.hovercard{position:absolute;z-index:100;max-width:440px;background:#12151c;border:1px solid #313846;border-radius:12px;
+  padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none;font-size:14px}
+.hovercard[hidden]{display:none}
+.hp-row{display:flex;gap:8px;margin-bottom:4px}
+.hp-k{color:var(--mut);width:52px;flex:0 0 52px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.hp-v{color:var(--txt);word-break:break-word}
+.hp-subj{font-weight:600}
+.hp-body{margin-top:8px;padding-top:8px;border-top:1px solid var(--br);color:#cfd6e0;max-height:260px;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-size:13px}
+.chip{transition:border-color .15s}.chip:hover{border-color:#3b82f6;text-decoration:none}
+
 </style>
 </head>
 <body>
@@ -441,6 +616,68 @@ button:hover{filter:brightness(1.1)}
   </header>
   {$content}
 </div>
+
+<script>
+function toggleAll(cb){
+  document.querySelectorAll('#rows input.rowcb').forEach(function(x){ x.checked = cb.checked; });
+  updateBulk();
+}
+function clearSel(){
+  document.querySelectorAll('#rows input.rowcb').forEach(function(x){ x.checked=false; });
+  var a=document.getElementById('selAll'); if(a) a.checked=false;
+  updateBulk();
+}
+function updateBulk(){
+  var sel = document.querySelectorAll('#rows input.rowcb:checked');
+  var bar = document.querySelector('.bulkbar');
+  var cnt = document.getElementById('bbCount');
+  if(bar){ bar.hidden = sel.length === 0; }
+  if(cnt){ cnt.textContent = sel.length; }
+}
+function bulkRejectCheck(){
+  var r = document.querySelector('.bulkbar input[name=rejection_reason]');
+  if(r && r.value.trim() === ''){ alert('Для отклонения укажите причину'); r.focus(); return false; }
+  return true;
+}
+// быстрый отказ из строки
+function quickReject(id){
+  var reason = prompt('Причина отказа (агент её получит):');
+  if(reason === null) return;
+  if(reason.trim() === ''){ alert('Причина обязательна'); return; }
+  var f = document.getElementById('quickRejectForm');
+  f.action = '/item/' + id + '/reject';
+  f.innerHTML = '<input type="hidden" name="rejection_reason">';
+  f.querySelector('input').value = reason;
+  f.submit();
+}
+document.addEventListener('change', function(ev){
+  if(ev.target && ev.target.classList && ev.target.classList.contains('rowcb')){ updateBulk(); }
+});
+// hover-превью email
+(function(){
+  var card = document.getElementById('hoverCard');
+  if(!card) return;
+  var hoverDelay = null;
+  document.querySelectorAll('#rows tr[data-hover]').forEach(function(tr){
+    tr.addEventListener('mouseenter', function(){
+      hoverDelay = setTimeout(function(){
+        card.innerHTML = tr.getAttribute('data-hover');
+        card.hidden = false;
+        var r = tr.getBoundingClientRect();
+        var top = r.bottom + window.scrollY + 6;
+        var left = r.left + window.scrollX + 40;
+        card.style.top = top + 'px';
+        card.style.left = Math.min(left, window.innerWidth - 470) + 'px';
+      }, 220);
+    });
+    tr.addEventListener('mouseleave', function(){
+      if(hoverDelay){ clearTimeout(hoverDelay); hoverDelay = null; }
+      card.hidden = true;
+    });
+  });
+})();
+</script>
+
 </body>
 </html>
 HTML;

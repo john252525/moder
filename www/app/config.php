@@ -36,4 +36,15 @@ return [
         'other' => 'Другое',
     ],
     'statuses' => ['pending', 'approved', 'rejected', 'applied', 'failed', 'expired'],
+
+    // UI-настройки (можно выключить через ENV, не трогая код)
+    'ui' => [
+        // hover-превью письма в списке (модалка при наведении на заголовок)
+        // Внимание: getenv() возвращает строку; "0" в PHP falsy -> нельзя `?:`.
+        'email_hover' => (static function (): bool {
+            $v = getenv('MODER_UI_EMAIL_HOVER');
+            if (!is_string($v) || trim($v) === '') { return true; } // дефолт = вкл
+            return trim($v) !== '0' && strtolower(trim($v)) !== 'false';
+        })(),
+    ],
 ];

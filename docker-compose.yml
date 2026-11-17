@@ -34,6 +34,7 @@ services:
       MODER_TOKEN_MODER: ${MODER_TOKEN_MODER}
       MODER_TOKEN_DEVOPS: ${MODER_TOKEN_DEVOPS}
       MODER_UI_SECRET: ${MODER_UI_SECRET:-}
+      MODER_UI_EMAIL_HOVER: ${MODER_UI_EMAIL_HOVER:-1}
     volumes:
       - ./www:/var/www/html:cached
     depends_on:

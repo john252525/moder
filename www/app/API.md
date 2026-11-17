@@ -60,3 +60,57 @@ Base URL: `https://moder.example.com` (или http://127.0.0.1:39010 локал�
 
 ## Healthcheck
     GET /health  -> { status, php, mysql, time }  (без авторизации, удобно для uptime-мониторинга)
+
+---
+
+## Пример: агент отправляет письмо на премодерацию
+
+Обязательные поля записи (без них 422): `idempotency_key`, `type`, `project`, `agent_name`, `title`, `reason`, `payload`.
+
+```bash
+curl -X POST https://moder.example.com/api/queue \
+  -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idempotency_key": "email-2026-11-17-000123",
+    "type": "email",
+    "project": "apitly",
+    "agent_name": "sales-bot",
+    "title": "Письмо клиенту: условия Enterprise",
+    "reason": "Клиент запросил КП. Проверить тон и цифры.",
+    "payload": {
+      "from": "sales@apitly.ru",
+      "to": ["ceo@bigcorp.ru"],
+      "cc": ["legal@apitly.ru"],
+      "subject": "КП — Apitly Enterprise",
+      "body": "Здравствуйте! Условия Enterprise: 250000 руб/мес.",
+      "attachments": [{"filename": "offer.pdf", "url": "https://example.com/offer.pdf", "size": 482133}]
+    }
+  }'
+  # -> 201 {"id":"<uuid>","status":"pending","deduplicated":false}
+```
+
+Поля `payload` для `email`: обязателен только `to` (мин. один адрес).
+Опциональны `from`, `cc`, `bcc`, `subject`, `body`, `html`, `attachments`.
+Для модератора полезны `subject` и `body`/`html` — они видны в превью.
+
+## Как агенту мониторить отклонения
+
+```bash
+# 1) По id: статус + причина отказа
+curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
+  https://moder.example.com/api/queue/<id>
+# status="rejected" -> поле rejection_reason содержит причину
+
+# 2) Все свои отклонённые
+curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
+  "https://moder.example.com/api/queue?agent_name=sales-bot&status=rejected&limit=50"
+
+# 3) Всё, что требует внимания (отклонено + ошибки применения)
+curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
+  "https://moder.example.com/api/queue?agent_name=sales-bot&status=archive"
+```
+
+Цикл агента: периодически запрашивать `status=rejected` (и `failed`) по своему
+`agent_name`, читать `rejection_reason`, исправлять и отправлять заново с **новым**
+`idempotency_key` (старый уже занят).
