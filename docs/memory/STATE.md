@@ -19,12 +19,16 @@ Last updated: 2026-11-17
 - `/health` без авторизации.
 - `www/bin/devops-worker.sh` (скелет), `www/bin/demo-agents.sh`.
 - Документация: `README.md`, `www/app/API.md`.
+- UI iter 002: чекбоксы + select-all, sticky bulk-панель (массовое одобрение/отклонение),
+  быстрые ✓/✗ в строке, отзыв одобрения (row + карточка, approved->pending), hover-превью письма.
+- `MODER_UI_EMAIL_HOVER` (env) — переключатель hover-превью (дефолт вкл).
+- API.md: пример POST письма + минимально обязательные поля + мониторинг отказов агентом.
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
 ## In progress
 
-- (пусто — memory layer готов, см. Done)
+- (пусто)
 
 ## Next
 
