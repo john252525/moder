@@ -26,6 +26,8 @@ Last updated: 2026-11-17
 - iter 003: `scheduled_at` (плановое время, UTC в БД, локально в UI); generated-колонки
   `audience_id`/`audience_name` из payload.audience; фильтры schedule (today/overdue/future/asap/all)
   и audience; воркер уважает расписание; версионные миграции (`schema_meta`).
+- iter 004: сегмент аудитории в hover-превью; актуальный пример письма (scheduled_at+audience)
+  в API.md — готовый образец для агентов.
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
