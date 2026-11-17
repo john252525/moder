@@ -1,0 +1,17 @@
+{
+  "idempotency_key": "article-2026-11-18-000001",
+  "type": "article",
+  "project": "blog",
+  "agent_name": "content-writer",
+  "title": "Как внедрить премодерацию за 3 дня",
+  "reason": "Контент-план Q4, статья #12. Проверить факты и тон.",
+  "scheduled_at": "2026-11-19T09:00:00+03:00",
+  "payload": {
+    "title": "Как внедрить премодерацию за 3 дня",
+    "slug": "premoder-3-days",
+    "excerpt": "MVP на одной таблице и JSONB.",
+    "cover": "https://example.com/cover.png",
+    "markdown": "# С чего начать\n\nНужна **одна таблица** с `payload JSON`.\n\n## Шаги\n\n1. Схема\n2. API\n3. UI",
+    "audience": { "id": "seg-dev-ru", "name": "Разработчики · РФ" }
+  }
+}

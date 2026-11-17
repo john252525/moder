@@ -161,3 +161,16 @@ curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
 ```
 
 Фильтр списка: `?audience_id=seg-ent-ru`.
+
+Готовые файлы примеров — в каталоге `examples/` репозитория:
+
+```bash
+cd /opt/moder
+curl -X POST http://127.0.0.1:39010/api/queue \
+  -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
+  -H "Content-Type: application/json" \
+  -d @examples/email.json
+```
+
+Доступны: `examples/email.json`, `examples/article.json`, `examples/ad.json`,
+`examples/site_change.json` (см. `examples/README.md`).

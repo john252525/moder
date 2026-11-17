@@ -1,0 +1,21 @@
+{
+  "idempotency_key": "email-2026-11-18-000123",
+  "type": "email",
+  "project": "apitly",
+  "agent_name": "sales-bot",
+  "title": "Письмо клиенту: условия Enterprise",
+  "reason": "Клиент запросил КП, сгенерирован ответ. Проверить тон и цифры.",
+  "scheduled_at": "2026-11-18T10:00:00+03:00",
+  "payload": {
+    "from": "sales@apitly.ru",
+    "to": ["ceo@bigcorp.ru"],
+    "cc": ["legal@apitly.ru"],
+    "subject": "Коммерческое предложение — Apitly Enterprise",
+    "body": "Здравствуйте! Направляю условия Enterprise: 250 000 руб/мес, SLA 99.95%.",
+    "html": "<h2>Коммерческое предложение</h2><p>Условия <b>Enterprise</b>: 250 000 руб/мес.</p>",
+    "attachments": [
+      { "filename": "offer.pdf", "url": "https://example.com/offer.pdf", "size": 482133 }
+    ],
+    "audience": { "id": "seg-ent-ru", "name": "Enterprise · РФ" }
+  }
+}

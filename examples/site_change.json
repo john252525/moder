@@ -1,0 +1,17 @@
+{
+  "idempotency_key": "site-2026-11-18-000001",
+  "type": "site_change",
+  "project": "apitly",
+  "agent_name": "dev-agent",
+  "title": "Правки цен на лендинге",
+  "reason": "Обновили тарифы, меняем цифры на странице.",
+  "scheduled_at": null,
+  "payload": {
+    "branch": "feature/pricing",
+    "commit": "a1b2c3d",
+    "files": ["src/pricing.tsx"],
+    "pr_url": "https://github.com/example/repo/pull/42",
+    "preview_url": "https://preview.example.com",
+    "diff": "--- a/src/pricing.tsx\n+++ b/src/pricing.tsx\n@@ -1,3 +1,3 @@\n-const PRICE = 199000;\n+const PRICE = 250000;\n export default PRICE;"
+  }
+}
