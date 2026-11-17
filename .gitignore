@@ -1,0 +1,31 @@
+# --- Секреты (никогда не коммитим) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# --- Данные и состояние ---
+mysql/
+mysql_data/
+logs/
+*.log
+
+# --- Сборка/кэш ---
+.cache/
+tmp/
+*.tar
+*.zip
+
+# --- Скриншоты/артефакты ---
+screenshots/
+*.png
+*.cookies
+*_render.html
+
+# --- Редакторы / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

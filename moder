@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Управление стеком moder (php 8.5 + mysql 9.4 + phpmyadmin + nginx)
+set -euo pipefail
+cd "$(dirname "$0")"
+
+CMD="${1:-help}"; shift || true
+
+case "$CMD" in
+  start)
+    docker compose up -d "$@"
+    ;;
+  stop)
+    docker compose stop "$@"
+    ;;
+  down)
+    docker compose down "$@"
+    ;;
+  restart)
+    docker compose restart "$@"
+    ;;
+  reboot|recreate)
+    docker compose down
+    docker compose up -d "$@"
+    ;;
+  rebuild)
+    docker compose build php "$@"
+    docker compose up -d --force-recreate php
+    ;;
+  status|ps)
+    docker compose ps
+    ;;
+  logs)
+    docker compose logs -f --tail=200 "$@"
+    ;;
+  shell|php)
+    docker compose exec php sh
+    ;;
+  mysql)
+    docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" '"$*"''
+    ;;
+  urls)
+    echo "app        http://127.0.0.1:${NGINX_PORT:-39010}/"
+    echo "phpMyAdmin http://127.0.0.1:${PMA_PORT:-39011}/"
+    echo "(публично: https://moder.example.com/  и  https://moder.example.com/phpmyadmin/)"
+    ;;
+  *)
+    cat <<USAGE
+moder stack
+  ./moder start [svc...]      поднять
+  ./moder stop  [svc...]      остановить (без удаления)
+  ./moder restart [svc...]    перезапустить
+  ./moder down  [-v]          удалить контейнеры (-v = вместе с volumes!)
+  ./moder reboot              down + up (без потери данных)
+  ./moder rebuild             пересобрать php-образ и пересоздать php
+  ./moder status              статус контейнеров
+  ./moder logs [svc...]       логи
+  ./moder shell               shell в php-контейнере
+  ./moder mysql "SQL"         SQL под root
+  ./moder urls                показать URL'ы
+USAGE
+    ;;
+esac
