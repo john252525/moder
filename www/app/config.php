@@ -41,6 +41,8 @@ return [
     'ui' => [
         // hover-превью письма в списке (модалка при наведении на заголовок)
         // Внимание: getenv() возвращает строку; "0" в PHP falsy -> нельзя `?:`.
+        // Часовой пояс модератора (влияет на границы «сегодня» и отображение времени)
+        'timezone' => getenv('MODER_TZ') ?: 'Europe/Moscow',
         'email_hover' => (static function (): bool {
             $v = getenv('MODER_UI_EMAIL_HOVER');
             if (!is_string($v) || trim($v) === '') { return true; } // дефолт = вкл

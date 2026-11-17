@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
   title           VARCHAR(500)  NOT NULL,
   reason          TEXT          NOT NULL,
   payload         JSON          NOT NULL,
+  scheduled_at    DATETIME      NULL,
+  audience_id     VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.id'))) STORED,
+  audience_name   VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.name'))) STORED,
   status          VARCHAR(16)   NOT NULL DEFAULT 'pending',
   reviewed_by     VARCHAR(120)  NULL,
   reviewed_at     DATETIME      NULL,
@@ -23,7 +26,9 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
   KEY idx_status_project (status, project),
   KEY idx_agent (agent_name),
   KEY idx_created (created_at),
-  KEY idx_type (type)
+  KEY idx_type (type),
+  KEY idx_sched (status, scheduled_at),
+  KEY idx_audience (audience_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS moderation_events (
@@ -35,4 +40,11 @@ CREATE TABLE IF NOT EXISTS moderation_events (
   created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_item (item_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Метаданные схемы: чтобы не гонять тяжёлые ALTER-проверки на каждом запросе
+CREATE TABLE IF NOT EXISTS schema_meta (
+  k VARCHAR(64)  NOT NULL,
+  v VARCHAR(255) NULL,
+  PRIMARY KEY (k)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

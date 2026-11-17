@@ -23,7 +23,18 @@ function p_list(array $p, string $k): array
  */
 function render_payload(string $type, array $p): string
 {
-    return match ($type) {
+    $aud = '';
+    if (isset($p['audience']) && is_array($p['audience'])) {
+        $aid = (string)($p['audience']['id'] ?? '');
+        $anm = (string)($p['audience']['name'] ?? '');
+        if ($aid !== '' || $anm !== '') {
+            $aud = '<div class="aud-line"><span class="aud-k">Сегмент</span> '
+                 . '<span class="aud-v">' . e($anm !== '' ? $anm : $aid) . '</span>'
+                 . ($anm !== '' && $aid !== '' ? ' <code>' . e($aid) . '</code>' : '')
+                 . '</div>';
+        }
+    }
+    return $aud . match ($type) {
         'email' => render_email($p),
         'article' => render_article($p),
         'site_change' => render_site_change($p),

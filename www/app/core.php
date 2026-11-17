@@ -145,6 +145,10 @@ function item_to_array(array $r, bool $withPayload = true): array
         'applied_at' => $r['applied_at'],
         'apply_error' => $r['apply_error'],
         'apply_attempts' => (int)$r['apply_attempts'],
+        'scheduled_at' => $r['scheduled_at'] ?? null,            // UTC как в БД
+        'scheduled_at_local' => dt_local_iso($r['scheduled_at'] ?? null),
+        'audience_id' => $r['audience_id'] ?? null,
+        'audience_name' => $r['audience_name'] ?? null,
         'created_at' => $r['created_at'],
         'updated_at' => $r['updated_at'],
     ];
@@ -152,6 +156,42 @@ function item_to_array(array $r, bool $withPayload = true): array
         $out['payload'] = json_decode((string)$r['payload'], true);
     }
     return $out;
+}
+
+
+/** Часовой пояс модератора (для границ «сегодня»). */
+function moder_tz(): DateTimeZone
+{
+    $tz = getenv('MODER_TZ');
+    if (!is_string($tz) || trim($tz) === '') { $tz = 'Europe/Moscow'; }
+    try { return new DateTimeZone($tz); } catch (Throwable $e) { return new DateTimeZone('UTC'); }
+}
+
+/**
+ * Границы «сегодня» по локальному поясу модератора, приведённые к UTC-строкам
+ * (в БД храним UTC). Возвращает [ начало_дня_UTC, конец_дня_UTC ].
+ */
+function day_bounds_utc(): array
+{
+    $tz = moder_tz();
+    $now = new DateTimeImmutable('now', $tz);
+    $start = $now->setTime(0, 0, 0);
+    $end = $start->modify('+1 day')->modify('-1 second');
+    $utc = new DateTimeZone('UTC');
+    return [
+        $start->setTimezone($utc)->format('Y-m-d H:i:s'),
+        $end->setTimezone($utc)->format('Y-m-d H:i:s'),
+    ];
+}
+
+/** UTC-строка из БД -> ISO-8601 в поясе модератора (для отображения). */
+function dt_local_iso(?string $utc): ?string
+{
+    if ($utc === null || $utc === '') { return null; }
+    try {
+        $dt = new DateTimeImmutable($utc, new DateTimeZone('UTC'));
+        return $dt->setTimezone(moder_tz())->format('Y-m-d H:i:sP');
+    } catch (Throwable $e) { return $utc; }
 }
 
 function e(?string $s): string
@@ -171,6 +211,33 @@ function build_filters(array $q, string $role): array
     }
     foreach (['project', 'type', 'agent_name'] as $f) {
         if (isset($q[$f]) && $q[$f] !== '') { $w[] = "{$f} = ?"; $a[] = (string)$q[$f]; }
+    }
+    // --- плановое время (schedule): all|today|overdue|future|asap ---
+    $schedule = isset($q['schedule']) ? (string)$q['schedule'] : '';
+    if ($schedule !== '' && $schedule !== 'all') {
+        [$dStart, $dEnd] = day_bounds_utc();
+        // «просрочено» = плановое время уже прошло, а действие ещё живо
+        $alive = "status IN ('pending','approved','failed')";
+        if ($schedule === 'overdue') {
+            // просрочено: плановое время раньше начала сегодня, а действие ещё живо
+            $w[] = "scheduled_at IS NOT NULL AND scheduled_at < ? AND {$alive}";
+            $a[] = $dStart;
+        } elseif ($schedule === 'today') {
+            // сегодня = asap (NULL) ИЛИ плановое внутри сегодняшнего дня
+            $w[] = "(scheduled_at IS NULL OR (scheduled_at >= ? AND scheduled_at <= ?))";
+            $a[] = $dStart;
+            $a[] = $dEnd;
+        } elseif ($schedule === 'future') {
+            $w[] = "scheduled_at IS NOT NULL AND scheduled_at > ?";
+            $a[] = $dEnd;
+        } elseif ($schedule === 'asap') {
+            $w[] = "scheduled_at IS NULL";
+        }
+    }
+    // --- сегмент аудитории (generated column audience_id) ---
+    if (isset($q['audience_id']) && $q['audience_id'] !== '') {
+        $w[] = 'audience_id = ?';
+        $a[] = (string)$q['audience_id'];
     }
     if (isset($q['q']) && trim((string)$q['q']) !== '') {
         $w[] = '(title LIKE ? OR reason LIKE ? OR project LIKE ? OR agent_name LIKE ?)';

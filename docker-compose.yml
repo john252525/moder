@@ -35,6 +35,7 @@ services:
       MODER_TOKEN_DEVOPS: ${MODER_TOKEN_DEVOPS}
       MODER_UI_SECRET: ${MODER_UI_SECRET:-}
       MODER_UI_EMAIL_HOVER: ${MODER_UI_EMAIL_HOVER:-1}
+      MODER_TZ: ${MODER_TZ:-Europe/Moscow}
     volumes:
       - ./www:/var/www/html:cached
     depends_on:

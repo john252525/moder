@@ -25,6 +25,19 @@ function api_handle(string $method, string $path, array $query): never
         }
         $payloadJson = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
+        // Плановое время: NULL = "как можно скорее". Принимаем ISO-8601 с зоной или без.
+        $scheduledAt = null;
+        if (array_key_exists('scheduled_at', $d) && $d['scheduled_at'] !== null && $d['scheduled_at'] !== '') {
+            $raw = (string)$d['scheduled_at'];
+            try {
+                $dt = new DateTimeImmutable($raw);
+            } catch (Throwable $e) {
+                throw new ApiError(422, 'validation', "Field 'scheduled_at' must be a valid datetime (ISO-8601)");
+            }
+            // храним в UTC (в БД datetime без зоны)
+            $scheduledAt = $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        }
+
         $pdo = db();
         $pdo->beginTransaction();
         try {
@@ -39,17 +52,17 @@ function api_handle(string $method, string $path, array $query): never
             }
             $id = uuid4();
             $ins = $pdo->prepare(
-                'INSERT INTO moderation_queue (id, idempotency_key, type, project, agent_name, title, reason, payload, status)
-                 VALUES (?,?,?,?,?,?,?,?, \'pending\')'
+                'INSERT INTO moderation_queue (id, idempotency_key, type, project, agent_name, title, reason, payload, scheduled_at, status)
+                 VALUES (?,?,?,?,?,?,?,?,?, \'pending\')'
             );
-            $ins->execute([$id, $idempotency, $type, $project, $agent, $title, $reason, $payloadJson]);
+            $ins->execute([$id, $idempotency, $type, $project, $agent, $title, $reason, $payloadJson, $scheduledAt]);
             log_event($id, $agent, 'created');
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_out(['id' => $id, 'status' => 'pending', 'deduplicated' => false], 201);
+        json_out(['id' => $id, 'status' => 'pending', 'scheduled_at' => $scheduledAt, 'deduplicated' => false], 201);
     }
 
     // --- GET /api/queue : список с фильтрами ---
@@ -130,7 +143,8 @@ function api_handle(string $method, string $path, array $query): never
                   WHERE status = 'approved'
                     AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL 10 MINUTE)
                     AND apply_attempts < ?
-                  ORDER BY created_at
+                    AND (scheduled_at IS NULL OR scheduled_at <= UTC_TIMESTAMP())
+                  ORDER BY (scheduled_at IS NOT NULL), scheduled_at, created_at
                   LIMIT $limit
                   FOR UPDATE SKIP LOCKED"
             );

@@ -23,6 +23,9 @@ Last updated: 2026-11-17
   быстрые ✓/✗ в строке, отзыв одобрения (row + карточка, approved->pending), hover-превью письма.
 - `MODER_UI_EMAIL_HOVER` (env) — переключатель hover-превью (дефолт вкл).
 - API.md: пример POST письма + минимально обязательные поля + мониторинг отказов агентом.
+- iter 003: `scheduled_at` (плановое время, UTC в БД, локально в UI); generated-колонки
+  `audience_id`/`audience_name` из payload.audience; фильтры schedule (today/overdue/future/asap/all)
+  и audience; воркер уважает расписание; версионные миграции (`schema_meta`).
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 

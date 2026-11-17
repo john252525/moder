@@ -114,3 +114,32 @@ curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
 Цикл агента: периодически запрашивать `status=rejected` (и `failed`) по своему
 `agent_name`, читать `rejection_reason`, исправлять и отправлять заново с **новым**
 `idempotency_key` (старый уже занят).
+
+## Плановое время и сегмент аудитории (iter 003)
+
+### scheduled_at — когда выполнять
+
+Необязательное поле верхнего уровня (не в payload). NULL/отсутствует = «как можно скорее».
+Принимается ISO-8601; в БД хранится в UTC, отдаётся и в UTC, и в поясе модератора.
+
+```json
+{"scheduled_at": "2026-11-18T10:00:00+03:00", ...}
+```
+
+Воркер берёт `approved` только там, где `scheduled_at IS NULL OR scheduled_at <= NOW()`.
+Модер может одобрить заранее — уйдёт по расписанию.
+
+Фильтры списка: `schedule=today|overdue|future|asap|all` (по умолчанию в UI — today).
+«Просрочено» = плановое в прошлом, а действие ещё живо (pending/approved/failed).
+
+### audience — сегмент целевой аудитории
+
+В payload, объект `{id, name}`. `id` — любая строка (не требует GUID).
+`name` — человекочитаемое. Из JSON выводятся колонки `audience_id`/`audience_name`
+(generated STORED) для фильтрации и индекса.
+
+```json
+{"payload": {..., "audience": {"id": "seg-ent-ru", "name": "Enterprise · РФ"}}}
+```
+
+Фильтр списка: `?audience_id=seg-ent-ru`.

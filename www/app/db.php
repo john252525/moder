@@ -17,13 +17,49 @@ function db(): PDO
     return $pdo;
 }
 
-/** Миграция схемы (idempotent). Запускается при старте приложения. */
+/**
+ * Миграция схемы (idempotent). Запускается при старте приложения.
+ *
+ * 1) schema.sql создаёт недостающие таблицы (CREATE TABLE IF NOT EXISTS).
+ * 2) Затем "догоняющие" ALTER'ы для уже существующих таблиц — версия хранится
+ *    в schema_meta, чтобы не дёргать тяжёлые проверки на каждом запросе.
+ */
 function db_migrate(): void
 {
     static $done = false;
     if ($done) { return; }
+    $pdo = db();
+
     $sql = file_get_contents(__DIR__ . '/schema.sql');
     if ($sql === false) { throw new RuntimeException('schema.sql not found'); }
-    db()->exec($sql);
+    $pdo->exec($sql);
+
+    // schema_meta должна существовать (создаётся в schema.sql)
+    $version = (int)($pdo->query("SELECT v FROM schema_meta WHERE k = 'schema_version'")->fetchColumn() ?: 0);
+
+    if ($version < 1) {
+        // v1: scheduled_at + generated audience_* (для БД, созданных до iter 003)
+        $cols = $pdo->query("SHOW COLUMNS FROM moderation_queue")->fetchAll();
+        $have = array_column($cols, 'Field');
+        if (!in_array('scheduled_at', $have, true)) {
+            $pdo->exec("ALTER TABLE moderation_queue ADD COLUMN scheduled_at DATETIME NULL AFTER payload");
+        }
+        if (!in_array('audience_id', $have, true)) {
+            $pdo->exec("ALTER TABLE moderation_queue
+                ADD COLUMN audience_id VARCHAR(190) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.id'))) STORED,
+                ADD COLUMN audience_name VARCHAR(190) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.name'))) STORED");
+        }
+        $idx = $pdo->query("SHOW INDEX FROM moderation_queue")->fetchAll();
+        $idxNames = array_column($idx, 'Key_name');
+        if (!in_array('idx_sched', $idxNames, true)) {
+            $pdo->exec("ALTER TABLE moderation_queue ADD KEY idx_sched (status, scheduled_at)");
+        }
+        if (!in_array('idx_audience', $idxNames, true)) {
+            $pdo->exec("ALTER TABLE moderation_queue ADD KEY idx_audience (audience_id)");
+        }
+        $pdo->exec("INSERT INTO schema_meta (k, v) VALUES ('schema_version', '1')
+                    ON DUPLICATE KEY UPDATE v = VALUES(v)");
+    }
+
     $done = true;
 }

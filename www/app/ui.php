@@ -205,6 +205,11 @@ function ui_list(array $q): string
     if (!isset($q['status']) || $q['status'] === '') {
         $q['status'] = 'pending';
     }
+    // По умолчанию показываем «сегодня» (asap + запланированные на сегодня).
+    // ?schedule=all -> снять ограничение.
+    if (!isset($q['schedule']) || $q['schedule'] === '') {
+        $q['schedule'] = 'today';
+    }
     [$where, $args] = build_filters($q, 'moder');
     [$total, $rows] = query_items($where, $args, $q);
 
@@ -213,9 +218,12 @@ function ui_list(array $q): string
     $fType = (string)($q['type'] ?? '');
     $fAgent = (string)($q['agent_name'] ?? '');
     $fQ = (string)($q['q'] ?? '');
+    $fSched = (string)($q['schedule'] ?? 'today');
+    $fAudience = (string)($q['audience_id'] ?? '');
 
     $projects = db()->query('SELECT DISTINCT project FROM moderation_queue ORDER BY project')->fetchAll(PDO::FETCH_COLUMN);
     $agents = db()->query('SELECT DISTINCT agent_name FROM moderation_queue ORDER BY agent_name')->fetchAll(PDO::FETCH_COLUMN);
+    $audiences = db()->query("SELECT DISTINCT audience_id, audience_name FROM moderation_queue WHERE audience_id IS NOT NULL ORDER BY audience_id")->fetchAll();
 
     $counts = db()->query("SELECT status, COUNT(*) c FROM moderation_queue GROUP BY status")->fetchAll();
     $cnt = array_column($counts, 'c', 'status');
@@ -292,11 +300,13 @@ function ui_list(array $q): string
         $rowsHtml .= '<td>' . e($r['project']) . '</td>';
         $rowsHtml .= '<td>' . e($r['agent_name']) . '</td>';
         $rowsHtml .= '<td class="muted small nowrap">' . e($r['created_at']) . '</td>';
+        $rowsHtml .= '<td class="nowrap">' . sched_cell($r['scheduled_at'], $r['status']) . '</td>';
+        $rowsHtml .= '<td>' . audience_cell($r['audience_id'], $r['audience_name']) . '</td>';
         $rowsHtml .= '<td class="qcell">' . $quick . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
-        $rowsHtml = '<tr><td colspan="8" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
+        $rowsHtml = '<tr><td colspan="10" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
     }
 
     $fl = flash();
@@ -318,6 +328,32 @@ function ui_list(array $q): string
     };
 
     $chipsHtml = $countChip('pending','На модерации') . $countChip('approved','Одобрено') . $countChip('applied','Применено') . $countChip('rejected','Отклонено') . $countChip('failed','Ошибки');
+    $chipsHtml .= '<a class="chip' . ($scOver > 0 ? ' chip-warn' : '') . '" href="/?schedule=overdue&status=active">Просрочено <b>' . $scOver . '</b></a>';
+    $chipsHtml .= '<a class="chip" href="/?schedule=future&status=active">Будущие <b>' . $scFut . '</b></a>';
+    $schedOpts = [
+        'today' => 'Сегодня',
+        'all' => 'Все',
+        'overdue' => 'Просроченные',
+        'future' => 'Будущие',
+        'asap' => 'Без даты (asap)',
+    ];
+    $schedOptsHtml = '';
+    foreach ($schedOpts as $v => $lab) {
+        $schedOptsHtml .= '<option value="' . e($v) . '"' . ($v === $fSched ? ' selected' : '') . '>' . e($lab) . '</option>';
+    }
+    // сегменты
+    $audOptsHtml = '<option value="">Сегмент: все</option>';
+    foreach ($audiences as $a) {
+        $aid = (string)$a['audience_id'];
+        $alab = $a['audience_name'] !== null && $a['audience_name'] !== '' ? $aid . ' — ' . $a['audience_name'] : $aid;
+        $audOptsHtml .= '<option value="' . e($aid) . '"' . ($aid === $fAudience ? ' selected' : '') . '>' . e($alab) . '</option>';
+    }
+
+    // счётчик просроченных и будущих (для чипсов)
+    [$dStartU, $dEndU] = day_bounds_utc();
+    $scOver = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at < " . db()->quote($dStartU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
+    $scFut  = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at > " . db()->quote($dEndU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
+
     $statusOptsHtml = buildStatusOptions($statusOpts, $fStatus);
     $projectOptsHtml = $opt($projects, $fProject, 'Проект: все');
     $typeOptsHtml = $opt(cfg('types'), $fType, 'Тип: все');
@@ -352,13 +388,15 @@ BULK;
   <select name="project">{$projectOptsHtml}</select>
   <select name="type">{$typeOptsHtml}</select>
   <select name="agent_name">{$agentOptsHtml}</select>
+  <select name="schedule">{$schedOptsHtml}</select>
+  <select name="audience_id">{$audOptsHtml}</select>
   <button type="submit">Фильтр</button>
   <a class="btn-ghost" href="/">Сброс</a>
 </form>
 <table class="tbl">
   <thead><tr>
     <th class="cbcell"><input type="checkbox" id="selAll" title="Выделить все" onclick="toggleAll(this)"></th>
-    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th></th>
+    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th>Выполнить</th><th>Сегмент</th><th></th>
   </tr></thead>
   <tbody id="rows">{$rowsHtml}</tbody>
 </table>
@@ -378,6 +416,36 @@ function buildStatusOptions(array $opts, string $cur): string
         $h .= '<option value="' . e((string)$v) . '"' . ((string)$v === $cur ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     return $h;
+}
+
+/** Ячейка «Выполнить»: плановое время + бейдж статуса расписания. */
+function sched_cell(?string $scheduledUtc, string $status): string
+{
+    if ($scheduledUtc === null || $scheduledUtc === '') {
+        return '<span class="sched sched-asap">asap</span>';
+    }
+    $local = dt_local_iso($scheduledUtc);
+    [$dStart, $dEnd] = day_bounds_utc();
+    $alive = in_array($status, ['pending', 'approved', 'failed'], true);
+    $cls = 'sched';
+    $tag = '';
+    if ($scheduledUtc < $dStart) {
+        if ($alive) { $cls .= ' sched-over'; $tag = ' <span class="mtag mtag-over">просрочено</span>'; }
+    } elseif ($scheduledUtc <= $dEnd) {
+        $cls .= ' sched-today';
+    } else {
+        $cls .= ' sched-future';
+    }
+    $label = $local !== null ? substr($local, 0, 16) : $scheduledUtc;
+    return '<span class="' . $cls . '">' . e($label) . '</span>' . $tag;
+}
+
+/** Ячейка сегмента аудитории. */
+function audience_cell(?string $id, ?string $name): string
+{
+    if ($id === null || $id === '') { return '<span class="muted">—</span>'; }
+    $t = $name !== null && $name !== '' ? $name : $id;
+    return '<span class="seg" title="' . e($id) . '">' . e($t) . '</span>';
 }
 
 function status_badge(string $s): string
@@ -449,6 +517,9 @@ HTML;
     $ititle = e($r['title']);
     $ireason = nl2br(e($r['reason']));
 
+    $schedRow = sched_cell($r['scheduled_at'] ?? null, $r['status']);
+    $audRow = audience_cell($r['audience_id'] ?? null, $r['audience_name'] ?? null);
+
     $meta = <<<HTML
 <table class="kv meta">
 <tr><th>Статус</th><td>{$badge}</td></tr>
@@ -457,6 +528,8 @@ HTML;
 <tr><th>Агент</th><td>{$ag}</td></tr>
 <tr><th>ID</th><td><code>{$id}</code> · key: <code>{$ikey}</code></td></tr>
 <tr><th>Создано</th><td>{$cr}</td></tr>
+<tr><th>Выполнить</th><td>{$schedRow}</td></tr>
+<tr><th>Сегмент</th><td>{$audRow}</td></tr>
 <tr><th>Попыток применения</th><td>{$att}</td></tr>
 </table>
 HTML;
@@ -605,6 +678,23 @@ button:hover{filter:brightness(1.1)}
 .hp-subj{font-weight:600}
 .hp-body{margin-top:8px;padding-top:8px;border-top:1px solid var(--br);color:#cfd6e0;max-height:260px;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-size:13px}
 .chip{transition:border-color .15s}.chip:hover{border-color:#3b82f6;text-decoration:none}
+
+
+.sched{font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.sched-asap{background:#1d2733;color:#9ecbff}
+.sched-today{background:#3a2f0e;color:#fbbf24}
+.sched-future{background:#16203a;color:#93b4ff}
+.sched-over{background:#3a1414;color:#f87171}
+.mtag{font-size:11px;padding:1px 6px;border-radius:5px}
+.mtag-over{background:#3a1414;color:#f87171;border:1px solid #6b2b2b}
+.chip-warn{border-color:#6b2b2b;color:#fecaca}
+.chip-warn b{color:#f87171}
+.seg{font-size:12px;color:#cfd6e0;background:#1b2130;border:1px solid var(--br);padding:2px 8px;border-radius:6px;white-space:nowrap}
+
+
+.aud-line{margin-bottom:10px;font-size:14px}
+.aud-k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin-right:8px}
+.aud-v{color:var(--txt);font-weight:600}
 
 </style>
 </head>
