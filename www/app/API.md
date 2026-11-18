@@ -197,17 +197,17 @@ DELETE /api/queue/<id>
 Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
 ```
 
-Удалить можно только запись в статусе `pending`. Ответы:
+Только статус `pending`. **Hard delete**: запись удаляется вместе со всей историей
+(`moderation_events`) — pending-письма как аудит ценности не несут.
 
-| Код | Когда | Тело |
+Атомарность: `SELECT ... FOR UPDATE` + `DELETE ... WHERE id=? AND status='pending'` —
+если запись параллельно одобрили, вернётся 409, а не удаление (защита от гонки с воркером).
+
+| Код | Когда | Поле `error` |
 |---|---|---|
-| 200 | удалено | `{"id":"...","deleted":true}` |
-| 400 | id не UUID | `{"error":"invalid_id","message":"Invalid id ... expected UUID like ..."}` |
-| 401 | нет/неверный токен | `{"error":"unauthorized",...}` |
-| 403 | роль devops | `{"error":"forbidden",...}` |
-| 404 | нет такой записи | `{"error":"not_found","message":"Item ... not found"}` |
-| 409 | статус не pending | `{"error":"conflict","message":"Cannot delete item in status ..."}` |
-
-Защита от гонки с воркером: `DELETE ... WHERE id=? AND status='pending'` — если
-запись параллельно одобрили, вернётся 409, а не удаление. Одобренное сначала
-отклоняют/отзывают (`reject`/`revoke`).
+| 200 | удалено | — (`{"id":"...","deleted":true}`) |
+| 400 | id не UUID | `invalid_id` |
+| 401 | нет/неверный токен | `unauthorized` |
+| 403 | роль devops | `forbidden` |
+| 404 | нет такой записи | `not_found` |
+| 409 | статус не pending | `conflict` |

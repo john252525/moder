@@ -55,7 +55,9 @@ function require_role(string ...$roles): string
 {
     $role = auth_role();
     if ($role === null) {
-        throw new ApiError(401, 'unauthorized', 'Missing or invalid token');
+        throw new ApiError(401, 'unauthorized',
+            'Missing or invalid token. Pass header: Authorization: Bearer <token> '
+            . '(roles: MODER_TOKEN_AGENT / MODER_TOKEN_MODER / MODER_TOKEN_DEVOPS)');
     }
     if ($roles !== [] && !in_array($role, $roles, true)) {
         throw new ApiError(403, 'forbidden', 'Insufficient role: ' . $role);

@@ -131,9 +131,9 @@ function api_handle(string $method, string $path, array $query): never
                 throw new ApiError(409, 'conflict',
                     'Item was approved concurrently; not deleted. Reload and try again.');
             }
-            // Аудит: пишем ДО коммита, чтобы событие точно сохранилось.
-            // События записи остаются как tombstone (append-only аудит, ADR-001/002).
-            log_event($id, $role, 'deleted');
+            // Hard delete: вместе с записью чистим всю её историю — pending-письма
+            // ценности как аудит не несут, а мусор от экспериментов/ошибок мешает.
+            $pdo->prepare('DELETE FROM moderation_events WHERE item_id = ?')->execute([$id]);
             $pdo->commit();
         } catch (ApiError $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
