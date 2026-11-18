@@ -4,9 +4,22 @@ services:
   mysql:
     image: mysql:9.4
     restart: unless-stopped
+    # Сервер на 1.7 ГБ + рядом mailcow: настраиваем MySQL экономно, иначе OOM-kill.
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=8M
+      - --innodb-flush-method=fsync
+      - --performance-schema=OFF
+      - --max-connections=30
+      - --table-open-cache=64
+      - --tmp-table-size=16M
+      - --max-heap-table-size=16M
+      - --key-buffer-size=8M
+      - --thread-cache-size=8
+      - --innodb-buffer-pool-instances=1
+    mem_limit: 384m
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
