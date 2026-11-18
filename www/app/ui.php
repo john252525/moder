@@ -202,14 +202,16 @@ function ui_bulk(array $post): void
 
 function ui_list(array $q): string
 {
-    if (!isset($q['status']) || $q['status'] === '') {
+    // Дефолты применяем ТОЛЬКО на «холодном» заходе (нет ни одного GET-параметра).
+    // Если пользователь явно выбрал «Все» (status= пустой) — уважаем выбор,
+    // иначе страница будет «отскакивать» обратно на pending.
+    $firstLoad = ($_GET === []);
+    if ($firstLoad) {
         $q['status'] = 'pending';
-    }
-    // По умолчанию показываем «сегодня» (asap + запланированные на сегодня).
-    // ?schedule=all -> снять ограничение.
-    if (!isset($q['schedule']) || $q['schedule'] === '') {
         $q['schedule'] = 'today';
     }
+    if (!isset($q['status'])) { $q['status'] = 'pending'; }
+    if (!isset($q['schedule']) || $q['schedule'] === '') { $q['schedule'] = 'all'; }
     [$where, $args] = build_filters($q, 'moder');
     [$total, $rows] = query_items($where, $args, $q);
 
