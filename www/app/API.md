@@ -35,6 +35,9 @@ Base URL: `https://moder.example.com` (или http://127.0.0.1:39010 локал�
     status: pending|approved|rejected|applied|failed|expired|active|archive
     -> { total, limit, offset, items: [...] }  (items без payload)
 
+> Для роли **agent** параметр `agent_name` в `GET /api/queue` **обязателен** (иначе
+> 422 `missing_param`): без него непонятно, чьи записи отдавать. Для moder/devops — опционален.
+
 ## 3. Одна запись
 
     GET /api/queue/{id}    -> вся запись + payload + events[]
@@ -211,22 +214,3 @@ Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
 
 > Для роли **agent** параметр `agent_name` в `GET /api/queue` **обязателен** (иначе
 > 422 `missing_param`): без него непонятно, чьи записи отдавать. Для moder/devops — опционален.
-
-## Удаление записи (DELETE)
-
-```bash
-DELETE /api/queue/<id>
-Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
-```
-
-Только статус `pending`. Атомарно (`DELETE ... WHERE status='pending'`), чтобы не
-гонять с воркером: если запись параллельно одобрили — вернётся 409, а не удаление.
-
-| Код | Когда | Поле `error` |
-|---|---|---|
-| 200 | удалено | — (`{"id":"...","deleted":true}`) |
-| 400 | id не UUID | `invalid_id` |
-| 401 | нет/неверный токен | `unauthorized` |
-| 403 | роль devops | `forbidden` |
-| 404 | нет такой записи | `not_found` |
-| 409 | статус не pending | `conflict` |
