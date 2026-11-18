@@ -32,6 +32,8 @@ Last updated: 2026-11-17
   копипаст из API.md теперь запускается из коробки.
 - iter 006: поле `template` (payload.template = {id,name}) — generated-колонки, фильтр,
   отображение в списке/карточке/hover; миграция v2. Паритет с audience.
+- iter 007: `DELETE /api/queue/{id}` (только pending, атомарно, без гонки с воркером);
+  внятные ошибки: 400 invalid_id, 422 missing_param (agent_name для роли agent), 404 с id.
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
