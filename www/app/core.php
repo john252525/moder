@@ -220,7 +220,7 @@ function build_filters(array $q, string $role): array
     if (isset($q['status']) && $q['status'] !== '') {
         $st = (string)$q['status'];
         if ($st === 'active') { $w[] = "status IN ('pending','approved')"; }
-        elseif ($st === 'archive') { $w[] = "status IN ('rejected','applied','failed','expired')"; }
+        elseif ($st === 'archive') { $w[] = "status IN ('rejected','applied','failed','expired','sent')"; }
         elseif (in_array($st, cfg('statuses'), true)) { $w[] = 'status = ?'; $a[] = $st; }
     }
     foreach (['project', 'type', 'agent_name'] as $f) {

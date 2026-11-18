@@ -35,7 +35,7 @@ return [
         'ad' => 'Реклама',
         'other' => 'Другое',
     ],
-    'statuses' => ['pending', 'approved', 'rejected', 'applied', 'failed', 'expired'],
+    'statuses' => ['pending', 'approved', 'rejected', 'applied', 'failed', 'expired', 'sent'],
 
     // UI-настройки (можно выключить через ENV, не трогая код)
     'ui' => [

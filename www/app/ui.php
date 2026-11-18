@@ -247,6 +247,7 @@ function ui_list(array $q): string
         'rejected' => 'Отклонено',
         'failed' => 'Ошибка применения',
         'active' => 'Активные (pending+approved)',
+        'sent' => 'Отправлено ранее',
         'archive' => 'Архив',
         '' => 'Все',
     ];
@@ -509,6 +510,7 @@ function status_badge(string $s): string
         'rejected' => ['Отклонено', 'b-rejected'],
         'failed' => ['Ошибка', 'b-failed'],
         'expired' => ['Просрочено', 'b-failed'],
+        'sent' => ['Отправлено ранее', 'b-sent'],
     ];
     [$t, $c] = $map[$s] ?? [$s, 'b-pending'];
     return '<span class="badge ' . $c . '">' . e($t) . '</span>';
@@ -658,7 +660,8 @@ button:hover{filter:brightness(1.1)}
 .tag{background:#1d2733;color:#9ecbff;border-radius:6px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .badge{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
 .b-pending{background:#3a2f0e;color:#fbbf24}.b-approved{background:#0e2b3a;color:#7dd3fc}
-.b-applied{background:#12341f;color:#4ade80}.b-rejected{background:#3a1414;color:#f87171}.b-failed{background:#3a2414;color:#fb923c}
+.b-applied{background:#12341f;color:#4ade80}.b-sent{background:#1e2430;color:#94a3b8}
+.b-rejected{background:#3a1414;color:#f87171}.b-failed{background:#3a2414;color:#fb923c}
 .pager{margin-top:14px;color:var(--mut);display:flex;gap:14px;justify-content:center}
 .reason{background:var(--card);border:1px solid var(--br);border-left:3px solid var(--acc);border-radius:0 10px 10px 0;padding:12px 16px}
 .grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
