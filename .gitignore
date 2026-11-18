@@ -30,3 +30,7 @@ Thumbs.db
 .idea/
 .vscode/
 backups/
+
+# --- mailer ---
+mailer_state/
+backups/

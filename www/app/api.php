@@ -225,6 +225,33 @@ function api_handle(string $method, string $path, array $query): never
         $limit = max(1, min(50, (int)($d['limit'] ?? $query['limit'] ?? 10)));
         $maxAtt = (int)cfg('max_apply_attempts');
         $pdo = db();
+
+        // Фильтры воркера: каждый воркер забирает только свои типы/проекты,
+        // чтобы мейлер не «съедал» задачи деплоя и наоборот.
+        $rawTypes = $d['types'] ?? $query['types'] ?? null;
+        if (is_string($rawTypes)) { $rawTypes = explode(',', $rawTypes); }
+        $types = [];
+        if (is_array($rawTypes)) {
+            foreach ($rawTypes as $t) {
+                if (is_string($t) && in_array(trim($t), cfg('types'), true)) { $types[] = trim($t); }
+            }
+        }
+        $project = null;
+        if (isset($d['project'])) { $project = (string)$d['project']; }
+        elseif (isset($query['project'])) { $project = (string)$query['project']; }
+
+        $typeSql = '';
+        $args = [$maxAtt];
+        if ($types !== []) {
+            $ph = implode(',', array_fill(0, count($types), '?'));
+            $typeSql = " AND type IN ($ph)";
+            $args = array_merge($args, $types);
+        }
+        if ($project !== null && $project !== '') {
+            $typeSql .= ' AND project = ?';
+            $args[] = $project;
+        }
+
         $claimed = [];
         $pdo->beginTransaction();
         try {
@@ -234,11 +261,12 @@ function api_handle(string $method, string $path, array $query): never
                     AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL 10 MINUTE)
                     AND apply_attempts < ?
                     AND (scheduled_at IS NULL OR scheduled_at <= UTC_TIMESTAMP())
+                    $typeSql
                   ORDER BY (scheduled_at IS NOT NULL), scheduled_at, created_at
                   LIMIT $limit
                   FOR UPDATE SKIP LOCKED"
             );
-            $st->execute([$maxAtt]);
+            $st->execute($args);
             $rows = $st->fetchAll();
             $upd = $pdo->prepare('UPDATE moderation_queue SET claimed_at=NOW(), apply_attempts=apply_attempts+1 WHERE id=?');
             foreach ($rows as $r) {

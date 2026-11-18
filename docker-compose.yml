@@ -73,9 +73,38 @@ services:
         condition: service_healthy
     networks: [moder_net]
 
+  mailer:
+    build:
+      context: ./mailer
+    restart: unless-stopped
+    environment:
+      MODER_BASE: http://nginx:80
+      MODER_TOKEN_DEVOPS: ${MODER_TOKEN_DEVOPS}
+      MAILER_DRY_RUN: ${MAILER_DRY_RUN:-1}
+      MAILER_MODE: ${MAILER_MODE:-batch}
+      MAILER_DAILY_LIMIT: ${MAILER_DAILY_LIMIT:-5}
+      MAILER_BATCH_SIZE: ${MAILER_BATCH_SIZE:-5}
+      MAILER_WINDOW: ${MAILER_WINDOW:-09:00-18:00}
+      MAILER_TZ: ${MAILER_TZ:-Europe/Moscow}
+      MAILER_POLL_INTERVAL: ${MAILER_POLL_INTERVAL:-300}
+      MAILER_MIN_GAP_SECONDS: ${MAILER_MIN_GAP_SECONDS:-0}
+      MAILER_STATE_FILE: /data/state.json
+      MAILER_ACCOUNTS: ${MAILER_ACCOUNTS:-}
+      MAILER_SMTP_HOST: ${MAILER_SMTP_HOST:-smtp.mail.ru}
+      MAILER_SMTP_PORT: ${MAILER_SMTP_PORT:-465}
+      MAILER_SMTP_USER: ${MAILER_SMTP_USER:-}
+      MAILER_SMTP_PASS: ${MAILER_SMTP_PASS:-}
+      MAILER_FROM_NAME: ${MAILER_FROM_NAME:-}
+      MAILER_LOG_LEVEL: ${MAILER_LOG_LEVEL:-info}
+    volumes:
+      - mailer_state:/data
+    depends_on: [nginx]
+    networks: [moder_net]
+
 volumes:
   mysql_data:
   pma_sessions:
+  mailer_state:
 
 networks:
   moder_net:
