@@ -346,7 +346,7 @@ def run_once(state: dict[str, Any]) -> int:
     if CFG["dry_run"]:
         items = peek_emails(limit)
         if not items:
-            log("no approved emails (dry-run)", "debug")
+            log("dry-run: no approved emails in queue", "info")
             return 0
         log(f"DRY-RUN: would process {len(items)} approved email(s) (nothing changed)")
         for it in items:
@@ -357,7 +357,7 @@ def run_once(state: dict[str, Any]) -> int:
 
     items = claim_emails(limit)
     if not items:
-        log("no approved emails", "debug")
+        log("no approved emails in queue, idling", "info")
         return 0
 
     log(f"claimed {len(items)} email(s)")
