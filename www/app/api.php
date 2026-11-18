@@ -5,6 +5,16 @@ require_once __DIR__ . '/core.php';
 
 function api_handle(string $method, string $path, array $query): never
 {
+    // Терпим хвостовой слэш: /api/queue/ == /api/queue
+    if ($path !== '/' && str_ends_with($path, '/')) {
+        $path = rtrim($path, '/');
+    }
+    if ($path === '/api') { $path = '/api/queue'; }  // частый случай
+
+    // OPTIONS — подсказка, какие методы допустимы (для отладки агентами)
+    if ($method === 'OPTIONS') {
+        json_out(['methods' => ['GET', 'POST', 'DELETE'], 'hint' => 'Use Authorization: Bearer <token>']);
+    }
     // --- POST /api/queue : агент создаёт запись (идемпотентно) ---
     if ($path === '/api/queue' && $method === 'POST') {
         require_role('agent', 'moder', 'devops');
@@ -252,5 +262,19 @@ function api_handle(string $method, string $path, array $query): never
         json_out(['id' => $m[1], 'status' => $newStatus, 'terminal' => $terminal]);
     }
 
-    throw new ApiError(404, 'not_found', "No route for {$method} {$path}");
+    // Внятный фолбэк: агенты не должны гадать, что не так.
+    $known = [
+        'POST   /api/queue',
+        'GET    /api/queue?agent_name=...',
+        'GET    /api/queue/{uuid}',
+        'DELETE /api/queue/{uuid}',
+        'POST   /api/queue/{uuid}/approve',
+        'POST   /api/queue/{uuid}/reject',
+        'POST   /api/queue/{uuid}/revoke',
+        'POST   /api/devops/claim',
+        'POST   /api/devops/{uuid}/applied',
+        'POST   /api/devops/{uuid}/failed',
+    ];
+    throw new ApiError(404, 'not_found',
+        "Unknown endpoint: {$method} {$path}. Known endpoints: " . implode(' | ', $known));
 }

@@ -211,3 +211,29 @@ Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
 | 403 | роль devops | `forbidden` |
 | 404 | нет такой записи | `not_found` |
 | 409 | статус не pending | `conflict` |
+
+## HTTP vs HTTPS (важно для агентов)
+
+API работает **только по HTTPS**. Запрос на `http://` получит `308` с JSON-телом:
+
+```json
+{"error":"use_https","message":"API is HTTPS-only. Use https://moder.apitly.ru/api/queue instead of http://. Example: curl https://moder.apitly.ru/api/queue -H 'Authorization: Bearer <token>'"}
+```
+
+Не пустой ответ — читайте тело. Всегда используйте `https://` (curl без `-L` не последует
+за редиректом, а тело редиректа может быть пустым у других сервисов).
+
+## Частые ошибки API и что они значат
+
+| Код | error | Причина / что делать |
+|---|---|---|
+| 401 | `unauthorized` | Нет/неверный токен. Добавьте `Authorization: Bearer <token>` |
+| 403 | `forbidden` | Роль токена не подходит (например devops для approve) |
+| 404 | `not_found` | Нет такой записи/эндпоинта; в тексте — id и список известных эндпоинтов |
+| 400 | `invalid_id` | id не UUID; в тексте пример формата |
+| 422 | `missing_param` | Не хватает параметра (например `agent_name` для роли agent) |
+| 422 | `validation` | Поле не прошло валидацию (тип, длина, формат даты) |
+| 409 | `conflict` | Запись уже обработана / не тот статус для операции |
+| 404 | `not_found` | Запрос не на тот HTTP-метод/путь — в тексте список известных эндпоинтов |
+
+Проверить доступные методы: `curl -X OPTIONS https://moder.apitly.ru/api/queue`.
