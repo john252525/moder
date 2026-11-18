@@ -63,11 +63,22 @@ function ui_handle(string $method, string $path, array $query, array $post): nev
         exit;
     }
 
+    $m = [];  // безопасная инициализация для preg_match-групп
     switch (true) {
         case $path === '/' || $path === '/index.php':
             echo ui_list($query); exit;
         case preg_match('#^/item/([0-9a-f-]{36})$#', $path, $m):
-            echo ui_item($m[1]); exit;
+            try {
+                echo ui_item($m[1]); exit;
+            } catch (ApiError $ex) {
+                http_response_code(404);
+                echo layout('Не найдено', '<div class="card" style="max-width:520px;margin:60px auto"><h1>Запись не найдена</h1><p class="muted">' . e($ex->getMessage()) . '</p><p><a href="/">← К очереди</a></p></div>');
+                exit;
+            }
+        case preg_match('#^/item/([^/]+)$#', $path):
+            http_response_code(400);
+            echo layout('Неверный id', '<div class="card" style="max-width:520px;margin:60px auto"><h1>Неверный id</h1><p class="muted">Ожидается UUID, получено: <code>' . e($m[1]) . '</code></p><p><a href="/">← К очереди</a></p></div>');
+            exit;
         case preg_match('#^/item/([0-9a-f-]{36})/(approve|reject|revoke)$#', $path, $m) && $method === 'POST':
             ui_action($m[1], $m[2], $post); exit;
         case $path === '/bulk' && $method === 'POST':
@@ -358,6 +369,11 @@ function ui_list(array $q): string
     if ($offset + $limit < $total) { $pager .= ' · <a href="' . e($mk($offset + $limit)) . '">ещё →</a>'; }
     $pager .= '</div>';
 
+    // счётчик просроченных и будущих (для чипсов)
+    [$dStartU, $dEndU] = day_bounds_utc();
+    $scOver = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at < " . db()->quote($dStartU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
+    $scFut  = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at > " . db()->quote($dEndU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
+
     $countChip = static function (string $k, string $label) use ($cnt): string {
         $c = $k === '' ? array_sum($cnt) : (int)($cnt[$k] ?? 0);
         return '<a class="chip" href="/?status=' . e($k) . '">' . e($label) . ' <b>' . $c . '</b></a>';
@@ -392,11 +408,6 @@ function ui_list(array $q): string
         $alab = $a['audience_name'] !== null && $a['audience_name'] !== '' ? $aid . ' — ' . $a['audience_name'] : $aid;
         $audOptsHtml .= '<option value="' . e($aid) . '"' . ($aid === $fAudience ? ' selected' : '') . '>' . e($alab) . '</option>';
     }
-
-    // счётчик просроченных и будущих (для чипсов)
-    [$dStartU, $dEndU] = day_bounds_utc();
-    $scOver = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at < " . db()->quote($dStartU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
-    $scFut  = (int)db()->query("SELECT COUNT(*) FROM moderation_queue WHERE scheduled_at IS NOT NULL AND scheduled_at > " . db()->quote($dEndU) . " AND status IN ('pending','approved','failed')")->fetchColumn();
 
     $statusOptsHtml = buildStatusOptions($statusOpts, $fStatus);
     $projectOptsHtml = $opt($projects, $fProject, 'Проект: все');
