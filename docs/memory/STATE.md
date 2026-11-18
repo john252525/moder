@@ -47,8 +47,8 @@ Last updated: 2026-11-17
 
 ## Next
 
-- Реальная логика apply в воркере (smtp / git merge+deploy / cms / ads api) по типу записи.
-- Крон для воркера (раз в минуту).
+- Реальная логика apply для НЕ-email типов (git merge+deploy / cms / ads api). Email — уже есть (mailer, iter 010).
+- Крон для не-email воркера (mailer сам поллит по MAILER_POLL_INTERVAL).
 - Короткие ID для человека либо поиск по `idempotency_key` (`/api/queue/by-key/<key>`).
 - Аутентификация UI через Caddy basicauth / OAuth вместо токена в форме.
 - Тесты (сейчас проверялось вручную curl-ом).
