@@ -68,6 +68,12 @@ function api_handle(string $method, string $path, array $query): never
     // --- GET /api/queue : список с фильтрами ---
     if ($path === '/api/queue' && $method === 'GET') {
         $role = require_role('agent', 'moder', 'devops');
+        // Роль 'agent' обязана указать agent_name: иначе непонятно, чьи записи отдавать.
+        if ($role === 'agent' && (!isset($query['agent_name']) || trim((string)$query['agent_name']) === '')) {
+            throw new ApiError(422, 'missing_param',
+                "Query parameter 'agent_name' is required for role 'agent'. "
+                . "Example: /api/queue?agent_name=my-agent&status=pending&limit=50");
+        }
         [$where, $args] = build_filters($query, $role);
         [$total, $rows] = query_items($where, $args, $query);
         json_out([
@@ -79,17 +85,64 @@ function api_handle(string $method, string $path, array $query): never
     }
 
     // --- GET /api/queue/{id} ---
-    if (preg_match('#^/api/queue/([0-9a-f-]{36})$#', $path, $m) && $method === 'GET') {
+    if (preg_match('#^/api/queue/([^/]+)$#', $path, $m) && $method === 'GET') {
         $role = require_role('agent', 'moder', 'devops');
-        $item = fetch_item($m[1]);
+        $id = require_uuid($m[1]);
+        $item = fetch_item($id);
         if ($role === 'agent' && $item['agent_name'] !== ($query['agent_name'] ?? $item['agent_name'])) {
             // агент не смотрит чужие записи в пределах одного токена (soft-check по параметру)
         }
         $events = db()->prepare('SELECT actor, action, comment, created_at FROM moderation_events WHERE item_id = ? ORDER BY id');
-        $events->execute([$m[1]]);
+        $events->execute([$id]);
         $data = item_to_array($item);
         $data['events'] = $events->fetchAll();
         json_out($data);
+    }
+
+    // --- DELETE /api/queue/{id} : удалить запись (агент/модер) ---
+    // Атомарно: DELETE ... WHERE id=? AND status='pending'. Если запись уже
+    // approved/claimed воркером — не удаляем (409), чтобы не гонять с воркером.
+    if (preg_match('#^/api/queue/([^/]+)$#', $path, $m) && $method === 'DELETE') {
+        $role = require_role('agent', 'moder');
+        $id = require_uuid($m[1]);
+
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $st = $pdo->prepare('SELECT id, status, agent_name, claimed_at FROM moderation_queue WHERE id = ? FOR UPDATE');
+            $st->execute([$id]);
+            $item = $st->fetch();
+            if (!$item) {
+                $pdo->rollBack();
+                throw new ApiError(404, 'not_found', "Item '{$id}' not found");
+            }
+            if ($item['status'] !== 'pending') {
+                $pdo->rollBack();
+                throw new ApiError(409, 'conflict',
+                    "Cannot delete item in status '{$item['status']}'. Only 'pending' can be deleted. "
+                    . "Use reject/revoke first if it was approved.");
+            }
+            // Атомарное удаление: условие по статусу защищает от гонки,
+            // если параллельно кто-то одобрил запись между SELECT и DELETE.
+            $del = $pdo->prepare("DELETE FROM moderation_queue WHERE id = ? AND status = 'pending'");
+            $del->execute([$id]);
+            if ($del->rowCount() === 0) {
+                $pdo->rollBack();
+                throw new ApiError(409, 'conflict',
+                    'Item was approved concurrently; not deleted. Reload and try again.');
+            }
+            // Аудит: пишем ДО коммита, чтобы событие точно сохранилось.
+            // События записи остаются как tombstone (append-only аудит, ADR-001/002).
+            log_event($id, $role, 'deleted');
+            $pdo->commit();
+        } catch (ApiError $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+        json_out(['id' => $id, 'deleted' => true]);
     }
 
     // --- POST /api/queue/{id}/approve ---

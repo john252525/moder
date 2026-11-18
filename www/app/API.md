@@ -186,3 +186,25 @@ curl -X POST http://127.0.0.1:39010/api/queue \
 
 Из JSON выводятся колонки `template_id`/`template_name` (generated STORED) для фильтра
 и индекса. Фильтр списка: `?template_id=tpl-enterprise-ru`.
+
+## Удаление записи
+
+```bash
+DELETE /api/queue/<id>
+Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
+```
+
+Удалить можно только запись в статусе `pending`. Ответы:
+
+| Код | Когда | Тело |
+|---|---|---|
+| 200 | удалено | `{"id":"...","deleted":true}` |
+| 400 | id не UUID | `{"error":"invalid_id","message":"Invalid id ... expected UUID like ..."}` |
+| 401 | нет/неверный токен | `{"error":"unauthorized",...}` |
+| 403 | роль devops | `{"error":"forbidden",...}` |
+| 404 | нет такой записи | `{"error":"not_found","message":"Item ... not found"}` |
+| 409 | статус не pending | `{"error":"conflict","message":"Cannot delete item in status ..."}` |
+
+Защита от гонки с воркером: `DELETE ... WHERE id=? AND status='pending'` — если
+запись параллельно одобрили, вернётся 409, а не удаление. Одобренное сначала
+отклоняют/отзывают (`reject`/`revoke`).

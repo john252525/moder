@@ -122,7 +122,7 @@ function fetch_item(string $id): array
     $st->execute([$id]);
     $row = $st->fetch();
     if (!$row) {
-        throw new ApiError(404, 'not_found', 'Item not found');
+        throw new ApiError(404, 'not_found', "Item '{$id}' not found");
     }
     return $row;
 }
@@ -194,6 +194,16 @@ function dt_local_iso(?string $utc): ?string
         $dt = new DateTimeImmutable($utc, new DateTimeZone('UTC'));
         return $dt->setTimezone(moder_tz())->format('Y-m-d H:i:sP');
     } catch (Throwable $e) { return $utc; }
+}
+
+/** Проверяет, что строка — UUID (36 символов, 8-4-4-4-12). Бросает 400 с внятным текстом. */
+function require_uuid(string $id): string
+{
+    if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
+        throw new ApiError(400, 'invalid_id',
+            "Invalid id '{$id}': expected UUID like 0a1b2c3d-1111-4222-8333-444455556666");
+    }
+    return $id;
 }
 
 function e(?string $s): string
