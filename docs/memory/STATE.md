@@ -38,6 +38,12 @@ Last updated: 2026-11-17
   про заголовок Authorization и роли.
 - iter 009: HTTP (порт 80) для /api/* отдаёт JSON-тело с подсказкой (не пустой 308);
   OPTIONS, терпимость к слэшу, 404 со списком эндпоинтов. Сертификат выпущен.
+- iter 010: отдельный контейнер `mailer` (SMTP): claim approved emails -> SMTP ->
+  applied/failed. Отдельные креды на каждый from, гибкий темп (daily limit, batch/spread,
+  окно), безопасный dry-run по умолчанию. Claim фильтрует по types/project.
+- iter 011: изолированный мобильный SPA `/m/` (сайдбар задач + панель деталей,
+  независимый скролл, History API, фильтры в bottom-sheet, рендер всех типов payload).
+  Старый UI и API не тронуты.
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
