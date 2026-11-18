@@ -30,6 +30,8 @@ Last updated: 2026-11-17
   в API.md — готовый образец для агентов.
 - iter 005: каталог `examples/` с рабочими JSON (email/article/ad/site_change) + README;
   копипаст из API.md теперь запускается из коробки.
+- iter 006: поле `template` (payload.template = {id,name}) — generated-колонки, фильтр,
+  отображение в списке/карточке/hover; миграция v2. Паритет с audience.
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
