@@ -149,6 +149,8 @@ function item_to_array(array $r, bool $withPayload = true): array
         'scheduled_at_local' => dt_local_iso($r['scheduled_at'] ?? null),
         'audience_id' => $r['audience_id'] ?? null,
         'audience_name' => $r['audience_name'] ?? null,
+        'template_id' => $r['template_id'] ?? null,
+        'template_name' => $r['template_name'] ?? null,
         'created_at' => $r['created_at'],
         'updated_at' => $r['updated_at'],
     ];
@@ -238,6 +240,11 @@ function build_filters(array $q, string $role): array
     if (isset($q['audience_id']) && $q['audience_id'] !== '') {
         $w[] = 'audience_id = ?';
         $a[] = (string)$q['audience_id'];
+    }
+    // --- шаблон письма (generated column template_id) ---
+    if (isset($q['template_id']) && $q['template_id'] !== '') {
+        $w[] = 'template_id = ?';
+        $a[] = (string)$q['template_id'];
     }
     if (isset($q['q']) && trim((string)$q['q']) !== '') {
         $w[] = '(title LIKE ? OR reason LIKE ? OR project LIKE ? OR agent_name LIKE ?)';

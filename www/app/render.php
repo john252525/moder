@@ -34,7 +34,18 @@ function render_payload(string $type, array $p): string
                  . '</div>';
         }
     }
-    return $aud . match ($type) {
+    $tpl = '';
+    if (isset($p['template']) && is_array($p['template'])) {
+        $tid = (string)($p['template']['id'] ?? '');
+        $tnm = (string)($p['template']['name'] ?? '');
+        if ($tid !== '' || $tnm !== '') {
+            $tpl = '<div class="aud-line"><span class="aud-k">Шаблон</span> '
+                 . '<span class="aud-v">' . e($tnm !== '' ? $tnm : $tid) . '</span>'
+                 . ($tnm !== '' && $tid !== '' ? ' <code>' . e($tid) . '</code>' : '')
+                 . '</div>';
+        }
+    }
+    return $aud . $tpl . match ($type) {
         'email' => render_email($p),
         'article' => render_article($p),
         'site_change' => render_site_change($p),

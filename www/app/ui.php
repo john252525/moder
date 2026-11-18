@@ -222,10 +222,12 @@ function ui_list(array $q): string
     $fQ = (string)($q['q'] ?? '');
     $fSched = (string)($q['schedule'] ?? 'today');
     $fAudience = (string)($q['audience_id'] ?? '');
+    $fTemplate = (string)($q['template_id'] ?? '');
 
     $projects = db()->query('SELECT DISTINCT project FROM moderation_queue ORDER BY project')->fetchAll(PDO::FETCH_COLUMN);
     $agents = db()->query('SELECT DISTINCT agent_name FROM moderation_queue ORDER BY agent_name')->fetchAll(PDO::FETCH_COLUMN);
     $audiences = db()->query("SELECT DISTINCT audience_id, audience_name FROM moderation_queue WHERE audience_id IS NOT NULL ORDER BY audience_id")->fetchAll();
+    $templates = db()->query("SELECT DISTINCT template_id, template_name FROM moderation_queue WHERE template_id IS NOT NULL ORDER BY template_id")->fetchAll();
 
     $counts = db()->query("SELECT status, COUNT(*) c FROM moderation_queue GROUP BY status")->fetchAll();
     $cnt = array_column($counts, 'c', 'status');
@@ -287,10 +289,25 @@ function ui_list(array $q): string
                 $audHtml = '<div class="hp-row"><span class="hp-k">Сегмент</span><span class="hp-v">' . e($audLabel) . '</span></div>';
             }
 
+            // шаблон письма: из generated-колонки, иначе из payload
+            $tplId = (string)($r['template_id'] ?? '');
+            $tplName = (string)($r['template_name'] ?? '');
+            if ($tplId === '' && is_array($pl['template'] ?? null)) {
+                $tplId = (string)($pl['template']['id'] ?? '');
+                $tplName = (string)($pl['template']['name'] ?? '');
+            }
+            $tplHtml = '';
+            if ($tplId !== '' || $tplName !== '') {
+                $tplLabel = $tplName !== '' ? $tplName : $tplId;
+                if ($tplName !== '' && $tplId !== '') { $tplLabel .= ' (' . $tplId . ')'; }
+                $tplHtml = '<div class="hp-row"><span class="hp-k">Шаблон</span><span class="hp-v">' . e($tplLabel) . '</span></div>';
+            }
+
             $preview = '<div class="hp-row"><span class="hp-k">От</span><span class="hp-v">' . e($from) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Кому</span><span class="hp-v">' . e($to) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Тема</span><span class="hp-v hp-subj">' . e($subj) . '</span></div>'
                 . $audHtml
+                . $tplHtml
                 . '<div class="hp-body">' . nl2br(e($body)) . '</div>';
             $hoverAttr = ' data-hover="' . e($preview) . '"';
         }
@@ -319,11 +336,12 @@ function ui_list(array $q): string
         $rowsHtml .= '<td class="muted small nowrap">' . e($r['created_at']) . '</td>';
         $rowsHtml .= '<td class="nowrap">' . sched_cell($r['scheduled_at'], $r['status']) . '</td>';
         $rowsHtml .= '<td>' . audience_cell($r['audience_id'], $r['audience_name']) . '</td>';
+        $rowsHtml .= '<td>' . template_cell($r['template_id'], $r['template_name']) . '</td>';
         $rowsHtml .= '<td class="qcell">' . $quick . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
-        $rowsHtml = '<tr><td colspan="10" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
+        $rowsHtml = '<tr><td colspan="11" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
     }
 
     $fl = flash();
@@ -358,6 +376,14 @@ function ui_list(array $q): string
     foreach ($schedOpts as $v => $lab) {
         $schedOptsHtml .= '<option value="' . e($v) . '"' . ($v === $fSched ? ' selected' : '') . '>' . e($lab) . '</option>';
     }
+    // шаблоны
+    $tplOptsHtml = '<option value="">Шаблон: все</option>';
+    foreach ($templates as $t) {
+        $tid = (string)$t['template_id'];
+        $tlab = $t['template_name'] !== null && $t['template_name'] !== '' ? $tid . ' — ' . $t['template_name'] : $tid;
+        $tplOptsHtml .= '<option value="' . e($tid) . '"' . ($tid === $fTemplate ? ' selected' : '') . '>' . e($tlab) . '</option>';
+    }
+
     // сегменты
     $audOptsHtml = '<option value="">Сегмент: все</option>';
     foreach ($audiences as $a) {
@@ -407,13 +433,14 @@ BULK;
   <select name="agent_name">{$agentOptsHtml}</select>
   <select name="schedule">{$schedOptsHtml}</select>
   <select name="audience_id">{$audOptsHtml}</select>
+  <select name="template_id">{$tplOptsHtml}</select>
   <button type="submit">Фильтр</button>
   <a class="btn-ghost" href="/">Сброс</a>
 </form>
 <table class="tbl">
   <thead><tr>
     <th class="cbcell"><input type="checkbox" id="selAll" title="Выделить все" onclick="toggleAll(this)"></th>
-    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th>Выполнить</th><th>Сегмент</th><th></th>
+    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th>Выполнить</th><th>Сегмент</th><th>Шаблон</th><th></th>
   </tr></thead>
   <tbody id="rows">{$rowsHtml}</tbody>
 </table>
@@ -463,6 +490,14 @@ function audience_cell(?string $id, ?string $name): string
     if ($id === null || $id === '') { return '<span class="muted">—</span>'; }
     $t = $name !== null && $name !== '' ? $name : $id;
     return '<span class="seg" title="' . e($id) . '">' . e($t) . '</span>';
+}
+
+/** Ячейка шаблона письма. */
+function template_cell(?string $id, ?string $name): string
+{
+    if ($id === null || $id === '') { return '<span class="muted">—</span>'; }
+    $t = $name !== null && $name !== '' ? $name : $id;
+    return '<span class="tpl" title="' . e($id) . '">' . e($t) . '</span>';
 }
 
 function status_badge(string $s): string
@@ -536,6 +571,7 @@ HTML;
 
     $schedRow = sched_cell($r['scheduled_at'] ?? null, $r['status']);
     $audRow = audience_cell($r['audience_id'] ?? null, $r['audience_name'] ?? null);
+    $tplRow = template_cell($r['template_id'] ?? null, $r['template_name'] ?? null);
 
     $meta = <<<HTML
 <table class="kv meta">
@@ -547,6 +583,7 @@ HTML;
 <tr><th>Создано</th><td>{$cr}</td></tr>
 <tr><th>Выполнить</th><td>{$schedRow}</td></tr>
 <tr><th>Сегмент</th><td>{$audRow}</td></tr>
+<tr><th>Шаблон</th><td>{$tplRow}</td></tr>
 <tr><th>Попыток применения</th><td>{$att}</td></tr>
 </table>
 HTML;
@@ -706,6 +743,7 @@ button:hover{filter:brightness(1.1)}
 .mtag-over{background:#3a1414;color:#f87171;border:1px solid #6b2b2b}
 .chip-warn{border-color:#6b2b2b;color:#fecaca}
 .chip-warn b{color:#f87171}
+.tpl{font-size:12px;background:#1e1b2e;border:1px solid #3b3560;color:#c4b5fd;padding:2px 8px;border-radius:6px;white-space:nowrap}
 .seg{font-size:12px;color:#cfd6e0;background:#1b2130;border:1px solid var(--br);padding:2px 8px;border-radius:6px;white-space:nowrap}
 
 

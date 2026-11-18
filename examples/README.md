@@ -11,7 +11,7 @@ curl -X POST https://moder.example.com/api/queue \
 
 | Файл | Тип | Что демонстрирует |
 |---|---|---|
-| `email.json` | email | html+body, вложения, сегмент, `scheduled_at` |
+| `email.json` | email | html+body, вложения, сегмент, шаблон, `scheduled_at` |
 | `article.json` | article | markdown, slug, cover, сегмент |
 | `ad.json` | ad | бюджет, таргет, креативы, сегмент |
 | `site_change.json` | site_change | diff, ветка, PR, preview URL, `scheduled_at: null` (asap) |

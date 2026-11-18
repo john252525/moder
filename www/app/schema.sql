@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
   scheduled_at    DATETIME      NULL,
   audience_id     VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.id'))) STORED,
   audience_name   VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.audience.name'))) STORED,
+  template_id     VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.template.id'))) STORED,
+  template_name   VARCHAR(190)  GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.template.name'))) STORED,
   status          VARCHAR(16)   NOT NULL DEFAULT 'pending',
   reviewed_by     VARCHAR(120)  NULL,
   reviewed_at     DATETIME      NULL,
@@ -28,7 +30,8 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
   KEY idx_created (created_at),
   KEY idx_type (type),
   KEY idx_sched (status, scheduled_at),
-  KEY idx_audience (audience_id)
+  KEY idx_audience (audience_id),
+  KEY idx_template (template_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS moderation_events (

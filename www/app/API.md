@@ -174,3 +174,15 @@ curl -X POST http://127.0.0.1:39010/api/queue \
 
 Доступны: `examples/email.json`, `examples/article.json`, `examples/ad.json`,
 `examples/site_change.json` (см. `examples/README.md`).
+
+### template — шаблон письма
+
+В payload, объект `{id, name}` — по аналогии с `audience`. Нужен, чтобы анализировать
+персонализированные письма: `id` шаблона + его человекочитаемое имя.
+
+```json
+{"payload": {..., "template": {"id": "tpl-enterprise-ru", "name": "Enterprise · RU (персонализация)"}}}
+```
+
+Из JSON выводятся колонки `template_id`/`template_name` (generated STORED) для фильтра
+и индекса. Фильтр списка: `?template_id=tpl-enterprise-ru`.

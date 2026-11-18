@@ -61,5 +61,22 @@ function db_migrate(): void
                     ON DUPLICATE KEY UPDATE v = VALUES(v)");
     }
 
+    if ($version < 2) {
+        // v2: generated template_id/template_name из payload.template (см. audience)
+        $cols = $pdo->query("SHOW COLUMNS FROM moderation_queue")->fetchAll();
+        $have = array_column($cols, 'Field');
+        if (!in_array('template_id', $have, true)) {
+            $pdo->exec("ALTER TABLE moderation_queue
+                ADD COLUMN template_id VARCHAR(190) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.template.id'))) STORED,
+                ADD COLUMN template_name VARCHAR(190) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(payload, '$.template.name'))) STORED");
+        }
+        $idx = $pdo->query("SHOW INDEX FROM moderation_queue")->fetchAll();
+        if (!in_array('idx_template', array_column($idx, 'Key_name'), true)) {
+            $pdo->exec("ALTER TABLE moderation_queue ADD KEY idx_template (template_id)");
+        }
+        $pdo->exec("INSERT INTO schema_meta (k, v) VALUES ('schema_version', '2')
+                    ON DUPLICATE KEY UPDATE v = VALUES(v)");
+    }
+
     $done = true;
 }
