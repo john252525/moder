@@ -211,6 +211,3 @@ Authorization: Bearer $MODER_TOKEN_AGENT   # или MODER_TOKEN_MODER
 Защита от гонки с воркером: `DELETE ... WHERE id=? AND status='pending'` — если
 запись параллельно одобрили, вернётся 409, а не удаление. Одобренное сначала
 отклоняют/отзывают (`reject`/`revoke`).
-
-> Для роли **agent** параметр `agent_name` в `GET /api/queue` **обязателен** (иначе
-> 422 `missing_param`): без него непонятно, чьи записи отдавать. Для moder/devops — опционален.
