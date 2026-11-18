@@ -173,6 +173,33 @@ function api_handle(string $method, string $path, array $query): never
         json_out(['id' => $m[1], 'status' => 'approved']);
     }
 
+    // --- POST /api/queue/{id}/revoke : отозвать одобрение (approved -> pending) ---
+    if (preg_match('#^/api/queue/([0-9a-f-]{36})/revoke$#', $path, $m) && $method === 'POST') {
+        $role = require_role('moder');
+        $d = json_body();
+        $comment = isset($d['comment']) && is_string($d['comment']) ? trim($d['comment']) : null;
+        $item = fetch_item($m[1]);
+        if ($item['status'] !== 'approved') {
+            throw new ApiError(409, 'conflict',
+                "Cannot revoke item in status '{$item['status']}'. Only 'approved' can be revoked.");
+        }
+        $st = db()->prepare(
+            "UPDATE moderation_queue
+                SET status='pending', reviewed_by=NULL, reviewed_at=NULL, claimed_at=NULL
+              WHERE id=? AND status='approved'"
+        );
+        $st->execute([$m[1]]);
+        if ($st->rowCount() === 0) {
+            throw new ApiError(409, 'conflict', 'Item was applied/claimed concurrently; not revoked');
+        }
+        log_event($m[1], $role, 'revoked', $comment);
+        $out = ['id' => $m[1], 'status' => 'pending'];
+        if (($item['claimed_at'] ?? null) !== null) {
+            $out['warning'] = 'Item was already claimed by a worker; check for duplicates';
+        }
+        json_out($out);
+    }
+
     // --- POST /api/queue/{id}/reject ---
     if (preg_match('#^/api/queue/([0-9a-f-]{36})/reject$#', $path, $m) && $method === 'POST') {
         $role = require_role('moder');
