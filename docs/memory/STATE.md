@@ -44,6 +44,8 @@ Last updated: 2026-11-17
 - iter 011: изолированный мобильный SPA `/m/` (сайдбар задач + панель деталей,
   независимый скролл, History API, фильтры в bottom-sheet, рендер всех типов payload).
   Старый UI и API не тронуты.
+- iter 012: фикс OOM MySQL (экономные настройки + mem_limit 384m, убит осиротевший
+  mysqld, державший ibdata1); восстановлены случайно удалённые файлы SPA; UI-фиксы (404/400).
 - **Memory layer полностью готов**: `AGENTS.md` + `docs/memory/*` (PROJECT/STATE/DECISIONS/CONVENTIONS/GLOSSARY/BACKLOG) + `iterations/` с шаблоном.
 - Подготовка к публичному репозиторию: `.gitattributes`, домен обезличен на `moder.example.com`, реальный домен только в серверном Caddy-конфиге.
 
