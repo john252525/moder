@@ -784,15 +784,25 @@ document.addEventListener('change', function(ev){
   var txt = document.getElementById('bodyModalText');
   var closeBtn = document.getElementById('bodyModalClose');
   function close(){ back.hidden = true; txt.textContent = ''; }
+  // ВАЖНО: capture=true — перехватываем ДО inline onclick на <tr>,
+  // иначе браузер успевает перейти на карточку записи.
   document.addEventListener('click', function(ev){
     var el = ev.target.closest && ev.target.closest('.body-preview');
     if (el) {
-      ev.preventDefault(); ev.stopPropagation();
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
       txt.textContent = el.getAttribute('data-body') || '';
       back.hidden = false;
       return;
     }
     if (ev.target === back) { close(); }
+  }, true);
+
+  // клик по модалке не должен уходить дальше
+  back.addEventListener('click', function(ev){
+    if (ev.target === back) { close(); }
+    ev.stopPropagation();
   });
   if (closeBtn) closeBtn.addEventListener('click', function(e){ e.stopPropagation(); close(); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !back.hidden) close(); });
