@@ -323,10 +323,12 @@ function ui_list(array $q): string
             $parts = [];
             foreach ($pl['tags'] as $t) {
                 if (is_string($t) && trim($t) !== '') {
-                    $parts[] = '<span class="tagchip">' . e($t) . '</span>';
+                    $parts[] = '<span class="tagchip" title="' . e($t) . '">' . e($t) . '</span>';
                 }
             }
-            $tagsVal = implode(' ', $parts);
+            if ($parts !== []) {
+                $tagsVal = '<span class="taglist">' . implode('', $parts) . '</span>';
+            }
         }
         $fromVal = isset($pl['from']) && is_string($pl['from']) ? $pl['from'] : '';
         $toVal = '';
@@ -338,9 +340,9 @@ function ui_list(array $q): string
 
         $rowsHtml .= '<td class="qcell">' . $quick . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($tagsVal !== '' ? $tagsVal : '<span class="muted">—</span>') . '</td>';
-        $rowsHtml .= '<td class="extra-cell">' . ($fromVal !== '' ? e($fromVal) : '<span class="muted">—</span>') . '</td>';
-        $rowsHtml .= '<td class="extra-cell">' . ($toVal !== '' ? e($toVal) : '<span class="muted">—</span>') . '</td>';
-        $rowsHtml .= '<td class="extra-cell">' . ($subjVal !== '' ? e($subjVal) : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($fromVal !== '' ? '<span class="clip">' . e($fromVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($toVal !== '' ? '<span class="clip">' . e($toVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($subjVal !== '' ? '<span class="clip wide">' . e($subjVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '</tr>';
     }
@@ -724,14 +726,23 @@ button:hover{filter:brightness(1.1)}
 
 
 .tags-line{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-.tagchip{font-size:12px;background:#1b2130;border:1px solid var(--br);color:#cfd6e0;
-  padding:3px 9px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tagchip{display:inline-block;font-size:12px;background:#1b2130;border:1px solid var(--br);color:#cfd6e0;
+  padding:3px 9px;border-radius:999px;white-space:nowrap}
 
 
-.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--br);border-radius:12px}
-.tbl-scroll .tbl{border:none;border-radius:0;min-width:100%}
-.extra-cell{max-width:260px;white-space:normal;word-break:break-word;font-size:12px;color:#cfd6e0;vertical-align:top}
+.tbl-scroll{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;border:1px solid var(--br);border-radius:12px;max-width:100%}
+/* Таблица расширяется по контенту, а не сжимается в ширину экрана */
+.tbl-scroll .tbl{width:auto;min-width:100%;border:none;border-radius:0;border-collapse:separate;border-spacing:0}
 .tbl-scroll th{white-space:nowrap}
+.tbl-scroll td{white-space:nowrap;vertical-align:top}
+/* Доп. колонки: не переносим, но и не даём раздуться бесконечно */
+.extra-cell{font-size:12px;color:#cfd6e0}
+/* каждое значение ограничено по ширине и обрезается с ellipsis */
+.extra-cell>.clip{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
+.extra-cell>.clip.wide{max-width:420px}
+/* теги — вертикальным списком, чтобы не растягивать таблицу */
+.extra-cell .taglist{display:flex;flex-direction:column;gap:3px;max-width:340px}
+.extra-cell .tagchip{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 </style>
 </head>
