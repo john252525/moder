@@ -343,7 +343,7 @@ function ui_list(array $q): string
         $rowsHtml .= '<td class="extra-cell">' . ($fromVal !== '' ? '<span class="clip">' . e($fromVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($toVal !== '' ? '<span class="clip">' . e($toVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($subjVal !== '' ? '<span class="clip wide">' . e($subjVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
-        $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? '<span class="clip wide" title="' . e(mb_substr($bodyVal, 0, 500)) . '">' . e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
