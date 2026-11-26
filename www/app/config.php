@@ -37,7 +37,4 @@ return [
     ],
     'statuses' => ['pending', 'approved', 'rejected', 'applied', 'failed', 'expired', 'sent'],
 
-    // UI-настройки (можно выключить через ENV, не трогая код)
-    'ui' => [
-    ],
 ];
