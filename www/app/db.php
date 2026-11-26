@@ -78,5 +78,27 @@ function db_migrate(): void
                     ON DUPLICATE KEY UPDATE v = VALUES(v)");
     }
 
+    if ($version < 3) {
+        // v3: удалены generated-колонки audience/template и их индексы
+        // (заменены на свободные payload.tags — без фильтрации на этом этапе).
+        $cols = $pdo->query('SHOW COLUMNS FROM moderation_queue')->fetchAll();
+        $have = array_column($cols, 'Field');
+        $idx = $pdo->query('SHOW INDEX FROM moderation_queue')->fetchAll();
+        $idxNames = array_column($idx, 'Key_name');
+
+        foreach (['idx_audience', 'idx_template'] as $name) {
+            if (in_array($name, $idxNames, true)) {
+                $pdo->exec("ALTER TABLE moderation_queue DROP KEY `$name`");
+            }
+        }
+        foreach (['audience_id', 'audience_name', 'template_id', 'template_name'] as $col) {
+            if (in_array($col, $have, true)) {
+                $pdo->exec("ALTER TABLE moderation_queue DROP COLUMN `$col`");
+            }
+        }
+        $pdo->exec("INSERT INTO schema_meta (k, v) VALUES ('schema_version', '3')
+                    ON DUPLICATE KEY UPDATE v = VALUES(v)");
+    }
+
     $done = true;
 }

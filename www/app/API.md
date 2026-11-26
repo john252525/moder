@@ -89,8 +89,7 @@ Base URL: `https://moder.example.com` (или http://127.0.0.1:39010 локал�
     "html": "<h2>Коммерческое предложение</h2><p>Условия <b>Enterprise</b>: 250 000 руб/мес.</p>",
     "attachments": [
       { "filename": "offer.pdf", "url": "https://example.com/offer.pdf", "size": 482133 }
-    ],
-    "audience": { "id": "seg-ent-ru", "name": "Enterprise · РФ" }
+    ]
   }
 }
 ```
@@ -107,13 +106,30 @@ curl -X POST https://moder.example.com/api/queue \
 Опциональны: `from`, `cc`, `bcc`, `subject`, `body`, `html`, `attachments`.
 Для модератора полезны `subject` и `body`/`html` — они видны в превью.
 
+### tags — свободные метки (без структуры)
+
+Необязательный массив строк. Сервис **не валидирует** формат и **не фильтрует** по ним —
+принимает и хранит как есть.
+
+```json
+"tags": [
+  "audience:seg-ent-ru:Enterprise · РФ",
+  "template:tpl-enterprise-ru:Enterprise · RU",
+  "subject:subj-enterprise-ru:Темы · Enterprise",
+  "priority:high"
+]
+```
+
+Любая строка допустима (в т.ч. без двоеточий). Показываются в карточке записи.
+Фильтрация по тегам появится позже.
+
+
 Что важно знать агенту:
 
 - **idempotency_key** — уникальный на задачу. Повтор с тем же ключом не создаёт дубль,
   возвращает существующий `id` с `deduplicated: true` (защита от ретраев).
 - **scheduled_at** — необязательно, ISO-8601 (лучше с зоной). Не указано = asap.
   Хранится в UTC; воркер не возьмёт раньше времени (модер может одобрить заранее).
-- **audience** — необязательно, `{id, name}`; `id` — любая строка. Фильтруется в UI.
 
 ## Как агенту мониторить отклонения
 
@@ -153,42 +169,7 @@ curl -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
 Фильтры списка: `schedule=today|overdue|future|asap|all` (по умолчанию в UI — today).
 «Просрочено» = плановое в прошлом, а действие ещё живо (pending/approved/failed).
 
-### audience — сегмент целевой аудитории
 
-В payload, объект `{id, name}`. `id` — любая строка (не требует GUID).
-`name` — человекочитаемое. Из JSON выводятся колонки `audience_id`/`audience_name`
-(generated STORED) для фильтрации и индекса.
-
-```json
-{"payload": {..., "audience": {"id": "seg-ent-ru", "name": "Enterprise · РФ"}}}
-```
-
-Фильтр списка: `?audience_id=seg-ent-ru`.
-
-Готовые файлы примеров — в каталоге `examples/` репозитория:
-
-```bash
-cd /opt/moder
-curl -X POST http://127.0.0.1:39010/api/queue \
-  -H "Authorization: Bearer $MODER_TOKEN_AGENT" \
-  -H "Content-Type: application/json" \
-  -d @examples/email.json
-```
-
-Доступны: `examples/email.json`, `examples/article.json`, `examples/ad.json`,
-`examples/site_change.json` (см. `examples/README.md`).
-
-### template — шаблон письма
-
-В payload, объект `{id, name}` — по аналогии с `audience`. Нужен, чтобы анализировать
-персонализированные письма: `id` шаблона + его человекочитаемое имя.
-
-```json
-{"payload": {..., "template": {"id": "tpl-enterprise-ru", "name": "Enterprise · RU (персонализация)"}}}
-```
-
-Из JSON выводятся колонки `template_id`/`template_name` (generated STORED) для фильтра
-и индекса. Фильтр списка: `?template_id=tpl-enterprise-ru`.
 
 ## Удаление записи
 

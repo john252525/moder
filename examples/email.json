@@ -24,13 +24,10 @@
         "size": 482133
       }
     ],
-    "audience": {
-      "id": "seg-ent-ru",
-      "name": "Enterprise · РФ"
-    },
-    "template": {
-      "id": "tpl-enterprise-ru",
-      "name": "Enterprise · RU (персонализация)"
-    }
+    "tags": [
+      "audience:seg-ent-ru:Enterprise · РФ",
+      "template:tpl-enterprise-ru:Enterprise · RU",
+      "subject:subj-enterprise-ru:Темы · Enterprise"
+    ]
   }
 }

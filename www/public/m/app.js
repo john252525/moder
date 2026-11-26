@@ -10,10 +10,10 @@ const LS_KEY = 'moder_m_token';
 
 const state = {
   token: sessionStorage.getItem(LS_KEY) || '',
-  filters: { status: 'pending', schedule: 'all', project: '', type: '', agent_name: '', audience_id: '', template_id: '', q: '' },
+  filters: { status: 'pending', schedule: 'all', project: '', type: '', agent_name: '', q: '' },
   items: [],
   currentId: null,
-  meta: { projects: [], agents: [], audiences: [], templates: [] },
+  meta: { projects: [], agents: [] },
 };
 
 const els = {
@@ -105,12 +105,6 @@ function tagsFor(it) {
   const out = [];
   out.push(`<span class="tag">${esc(TYPE_LABEL[it.type] || it.type)}</span>`);
   out.push(fmtSched(it));
-  if (it.audience_id) {
-    out.push(`<span class="tag seg">${esc(it.audience_name || it.audience_id)}</span>`);
-  }
-  if (it.template_id) {
-    out.push(`<span class="tag tpl">${esc(it.template_name || it.template_id)}</span>`);
-  }
   return out.join('');
 }
 
@@ -344,6 +338,12 @@ function renderDetail(it) {
   html += `<div class="title-lg">${esc(it.title)}</div>`;
   html += `<div class="meta-chips">${tagsFor(it)}</div>`;
   html += `<div class="reason"><b>Зачем:</b> ${esc(it.reason)}</div>`;
+  const tags = Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string' && t.trim()) : [];
+  if (tags.length) {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">` +
+      tags.map(t => `<span style="font-size:12px;background:#1b2130;border:1px solid var(--br);color:#cfd6e0;padding:3px 9px;border-radius:999px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${esc(t)}</span>`).join('') +
+      `</div>`;
+  }
   html += renderPayload(it.type, p);
 
   if (it.status === 'rejected' && it.rejection_reason) {
@@ -357,8 +357,6 @@ function renderDetail(it) {
     <tr><th>Проект</th><td>${esc(it.project)}</td></tr>
     <tr><th>Агент</th><td>${esc(it.agent_name)}</td></tr>
     <tr><th>Выполнить</th><td>${fmtSched(it)}</td></tr>
-    <tr><th>Сегмент</th><td>${it.audience_id ? esc(it.audience_name || it.audience_id) : '<span class="muted">—</span>'}</td></tr>
-    <tr><th>Шаблон</th><td>${it.template_id ? esc(it.template_name || it.template_id) : '<span class="muted">—</span>'}</td></tr>
     <tr><th>Создано</th><td>${esc(it.created_at)}</td></tr>
     <tr><th>Попыток</th><td>${esc(String(it.apply_attempts))}</td></tr>
     <tr><th>ID</th><td style="font-size:11px;word-break:break-all" class="muted">${esc(it.id)}</td></tr>
@@ -433,8 +431,6 @@ function qs() {
   if (f.project) p.set('project', f.project);
   if (f.type) p.set('type', f.type);
   if (f.agent_name) p.set('agent_name', f.agent_name);
-  if (f.audience_id) p.set('audience_id', f.audience_id);
-  if (f.template_id) p.set('template_id', f.template_id);
   if (f.q) p.set('q', f.q);
   return p.toString();
 }

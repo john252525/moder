@@ -10,12 +10,19 @@
     "budget": "150000 руб",
     "period": "01.12-31.12",
     "channel": "VK Ads",
-    "targeting": ["retargeting", "lookalike 1%"],
+    "targeting": [
+      "retargeting",
+      "lookalike 1%"
+    ],
     "headline": "Управляйте задачами с ИИ",
     "description": "Попробуйте бесплатно 14 дней",
     "cta": "Начать",
     "landing_url": "https://apitly.ru/",
-    "creatives": ["https://example.com/creative1.png"],
-    "audience": { "id": "seg-enterprise", "name": "Enterprise-клиенты" }
+    "creatives": [
+      "https://example.com/creative1.png"
+    ],
+    "tags": [
+      "audience:seg-enterprise:Enterprise-клиенты"
+    ]
   }
 }

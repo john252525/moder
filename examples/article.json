@@ -12,6 +12,8 @@
     "excerpt": "MVP на одной таблице и JSONB.",
     "cover": "https://example.com/cover.png",
     "markdown": "# С чего начать\n\nНужна **одна таблица** с `payload JSON`.\n\n## Шаги\n\n1. Схема\n2. API\n3. UI",
-    "audience": { "id": "seg-dev-ru", "name": "Разработчики · РФ" }
+    "tags": [
+      "audience:seg-dev-ru:Разработчики · РФ"
+    ]
   }
 }

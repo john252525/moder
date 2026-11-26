@@ -21,31 +21,29 @@ function p_list(array $p, string $k): array
  * Полиморфный рендер payload по типу записи.
  * Возвращает HTML (уже безопасный: все значения экранируются).
  */
+
+/**
+ * Строка с тегами (payload.tags) — только отображение, без фильтрации.
+ * Формат тегов свободный: показываем как есть.
+ */
+function render_tags_line(array $p): string
+{
+    $tags = $p['tags'] ?? null;
+    if (!is_array($tags) || $tags === []) {
+        return '';
+    }
+    $chips = '';
+    foreach ($tags as $t) {
+        if (!is_string($t) || trim($t) === '') { continue; }
+        $chips .= '<span class="tagchip">' . e($t) . '</span>';
+    }
+    if ($chips === '') { return ''; }
+    return '<div class="tags-line">' . $chips . '</div>';
+}
+
 function render_payload(string $type, array $p): string
 {
-    $aud = '';
-    if (isset($p['audience']) && is_array($p['audience'])) {
-        $aid = (string)($p['audience']['id'] ?? '');
-        $anm = (string)($p['audience']['name'] ?? '');
-        if ($aid !== '' || $anm !== '') {
-            $aud = '<div class="aud-line"><span class="aud-k">Сегмент</span> '
-                 . '<span class="aud-v">' . e($anm !== '' ? $anm : $aid) . '</span>'
-                 . ($anm !== '' && $aid !== '' ? ' <code>' . e($aid) . '</code>' : '')
-                 . '</div>';
-        }
-    }
-    $tpl = '';
-    if (isset($p['template']) && is_array($p['template'])) {
-        $tid = (string)($p['template']['id'] ?? '');
-        $tnm = (string)($p['template']['name'] ?? '');
-        if ($tid !== '' || $tnm !== '') {
-            $tpl = '<div class="aud-line"><span class="aud-k">Шаблон</span> '
-                 . '<span class="aud-v">' . e($tnm !== '' ? $tnm : $tid) . '</span>'
-                 . ($tnm !== '' && $tid !== '' ? ' <code>' . e($tid) . '</code>' : '')
-                 . '</div>';
-        }
-    }
-    return $aud . $tpl . match ($type) {
+    return render_tags_line($p) . match ($type) {
         'email' => render_email($p),
         'article' => render_article($p),
         'site_change' => render_site_change($p),

@@ -232,13 +232,9 @@ function ui_list(array $q): string
     $fAgent = (string)($q['agent_name'] ?? '');
     $fQ = (string)($q['q'] ?? '');
     $fSched = (string)($q['schedule'] ?? 'today');
-    $fAudience = (string)($q['audience_id'] ?? '');
-    $fTemplate = (string)($q['template_id'] ?? '');
 
     $projects = db()->query('SELECT DISTINCT project FROM moderation_queue ORDER BY project')->fetchAll(PDO::FETCH_COLUMN);
     $agents = db()->query('SELECT DISTINCT agent_name FROM moderation_queue ORDER BY agent_name')->fetchAll(PDO::FETCH_COLUMN);
-    $audiences = db()->query("SELECT DISTINCT audience_id, audience_name FROM moderation_queue WHERE audience_id IS NOT NULL ORDER BY audience_id")->fetchAll();
-    $templates = db()->query("SELECT DISTINCT template_id, template_name FROM moderation_queue WHERE template_id IS NOT NULL ORDER BY template_id")->fetchAll();
 
     $counts = db()->query("SELECT status, COUNT(*) c FROM moderation_queue GROUP BY status")->fetchAll();
     $cnt = array_column($counts, 'c', 'status');
@@ -287,39 +283,11 @@ function ui_list(array $q): string
             $from = (string)($pl['from'] ?? '');
             $body = (string)($pl['body'] ?? '');
             if ($body === '' && !empty($pl['html'])) { $body = '[HTML-письмо]'; }
-            // сегмент аудитории: из generated-колонки, а если пусто — из payload
-            $audId = (string)($r['audience_id'] ?? '');
-            $audName = (string)($r['audience_name'] ?? '');
-            if ($audId === '' && is_array($pl['audience'] ?? null)) {
-                $audId = (string)($pl['audience']['id'] ?? '');
-                $audName = (string)($pl['audience']['name'] ?? '');
-            }
-            $audHtml = '';
-            if ($audId !== '' || $audName !== '') {
-                $audLabel = $audName !== '' ? $audName : $audId;
-                if ($audName !== '' && $audId !== '') { $audLabel .= ' (' . $audId . ')'; }
-                $audHtml = '<div class="hp-row"><span class="hp-k">Сегмент</span><span class="hp-v">' . e($audLabel) . '</span></div>';
-            }
 
-            // шаблон письма: из generated-колонки, иначе из payload
-            $tplId = (string)($r['template_id'] ?? '');
-            $tplName = (string)($r['template_name'] ?? '');
-            if ($tplId === '' && is_array($pl['template'] ?? null)) {
-                $tplId = (string)($pl['template']['id'] ?? '');
-                $tplName = (string)($pl['template']['name'] ?? '');
-            }
-            $tplHtml = '';
-            if ($tplId !== '' || $tplName !== '') {
-                $tplLabel = $tplName !== '' ? $tplName : $tplId;
-                if ($tplName !== '' && $tplId !== '') { $tplLabel .= ' (' . $tplId . ')'; }
-                $tplHtml = '<div class="hp-row"><span class="hp-k">Шаблон</span><span class="hp-v">' . e($tplLabel) . '</span></div>';
-            }
 
             $preview = '<div class="hp-row"><span class="hp-k">От</span><span class="hp-v">' . e($from) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Кому</span><span class="hp-v">' . e($to) . '</span></div>'
                 . '<div class="hp-row"><span class="hp-k">Тема</span><span class="hp-v hp-subj">' . e($subj) . '</span></div>'
-                . $audHtml
-                . $tplHtml
                 . '<div class="hp-body">' . nl2br(e($body)) . '</div>';
             $hoverAttr = ' data-hover="' . e($preview) . '"';
         }
@@ -347,13 +315,37 @@ function ui_list(array $q): string
         $rowsHtml .= '<td>' . e($r['agent_name']) . '</td>';
         $rowsHtml .= '<td class="muted small nowrap">' . e($r['created_at']) . '</td>';
         $rowsHtml .= '<td class="nowrap">' . sched_cell($r['scheduled_at'], $r['status']) . '</td>';
-        $rowsHtml .= '<td>' . audience_cell($r['audience_id'], $r['audience_name']) . '</td>';
-        $rowsHtml .= '<td>' . template_cell($r['template_id'], $r['template_name']) . '</td>';
+        // дополнительные поля из payload (справа, таблица скроллится вправо)
+        $pl = json_decode((string)$r['payload'], true);
+        if (!is_array($pl)) { $pl = []; }
+        $tagsVal = '';
+        if (isset($pl['tags']) && is_array($pl['tags'])) {
+            $parts = [];
+            foreach ($pl['tags'] as $t) {
+                if (is_string($t) && trim($t) !== '') {
+                    $parts[] = '<span class="tagchip">' . e($t) . '</span>';
+                }
+            }
+            $tagsVal = implode(' ', $parts);
+        }
+        $fromVal = isset($pl['from']) && is_string($pl['from']) ? $pl['from'] : '';
+        $toVal = '';
+        if (isset($pl['to'])) {
+            $toVal = is_array($pl['to']) ? implode(', ', array_map('strval', $pl['to'])) : (string)$pl['to'];
+        }
+        $subjVal = isset($pl['subject']) && is_string($pl['subject']) ? $pl['subject'] : '';
+        $bodyVal = isset($pl['body']) && is_string($pl['body']) ? $pl['body'] : '';
+
         $rowsHtml .= '<td class="qcell">' . $quick . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($tagsVal !== '' ? $tagsVal : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($fromVal !== '' ? e($fromVal) : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($toVal !== '' ? e($toVal) : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($subjVal !== '' ? e($subjVal) : '<span class="muted">—</span>') . '</td>';
+        $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
-        $rowsHtml = '<tr><td colspan="11" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
+        $rowsHtml = '<tr><td colspan="14" class="muted" style="text-align:center;padding:40px">Записей нет</td></tr>';
     }
 
     $fl = flash();
@@ -393,22 +385,6 @@ function ui_list(array $q): string
     foreach ($schedOpts as $v => $lab) {
         $schedOptsHtml .= '<option value="' . e($v) . '"' . ($v === $fSched ? ' selected' : '') . '>' . e($lab) . '</option>';
     }
-    // шаблоны
-    $tplOptsHtml = '<option value="">Шаблон: все</option>';
-    foreach ($templates as $t) {
-        $tid = (string)$t['template_id'];
-        $tlab = $t['template_name'] !== null && $t['template_name'] !== '' ? $tid . ' — ' . $t['template_name'] : $tid;
-        $tplOptsHtml .= '<option value="' . e($tid) . '"' . ($tid === $fTemplate ? ' selected' : '') . '>' . e($tlab) . '</option>';
-    }
-
-    // сегменты
-    $audOptsHtml = '<option value="">Сегмент: все</option>';
-    foreach ($audiences as $a) {
-        $aid = (string)$a['audience_id'];
-        $alab = $a['audience_name'] !== null && $a['audience_name'] !== '' ? $aid . ' — ' . $a['audience_name'] : $aid;
-        $audOptsHtml .= '<option value="' . e($aid) . '"' . ($aid === $fAudience ? ' selected' : '') . '>' . e($alab) . '</option>';
-    }
-
     $statusOptsHtml = buildStatusOptions($statusOpts, $fStatus);
     $projectOptsHtml = $opt($projects, $fProject, 'Проект: все');
     $typeOptsHtml = $opt(cfg('types'), $fType, 'Тип: все');
@@ -444,18 +420,19 @@ BULK;
   <select name="type">{$typeOptsHtml}</select>
   <select name="agent_name">{$agentOptsHtml}</select>
   <select name="schedule">{$schedOptsHtml}</select>
-  <select name="audience_id">{$audOptsHtml}</select>
-  <select name="template_id">{$tplOptsHtml}</select>
   <button type="submit">Фильтр</button>
   <a class="btn-ghost" href="/">Сброс</a>
 </form>
+<div class="tbl-scroll">
 <table class="tbl">
   <thead><tr>
     <th class="cbcell"><input type="checkbox" id="selAll" title="Выделить все" onclick="toggleAll(this)"></th>
-    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th>Выполнить</th><th>Сегмент</th><th>Шаблон</th><th></th>
+    <th>Статус</th><th>Тип</th><th>Запись</th><th>Проект</th><th>Агент</th><th>Создано</th><th>Выполнить</th><th></th>
+    <th>tags</th><th>from</th><th>to</th><th>subject</th><th>body</th>
   </tr></thead>
   <tbody id="rows">{$rowsHtml}</tbody>
 </table>
+</div>
 {$pager}
 {$bulkPanel}
 {$hoverModal}
@@ -494,22 +471,6 @@ function sched_cell(?string $scheduledUtc, string $status): string
     }
     $label = $local !== null ? substr($local, 0, 16) : $scheduledUtc;
     return '<span class="' . $cls . '">' . e($label) . '</span>' . $tag;
-}
-
-/** Ячейка сегмента аудитории. */
-function audience_cell(?string $id, ?string $name): string
-{
-    if ($id === null || $id === '') { return '<span class="muted">—</span>'; }
-    $t = $name !== null && $name !== '' ? $name : $id;
-    return '<span class="seg" title="' . e($id) . '">' . e($t) . '</span>';
-}
-
-/** Ячейка шаблона письма. */
-function template_cell(?string $id, ?string $name): string
-{
-    if ($id === null || $id === '') { return '<span class="muted">—</span>'; }
-    $t = $name !== null && $name !== '' ? $name : $id;
-    return '<span class="tpl" title="' . e($id) . '">' . e($t) . '</span>';
 }
 
 function status_badge(string $s): string
@@ -583,8 +544,6 @@ HTML;
     $ireason = nl2br(e($r['reason']));
 
     $schedRow = sched_cell($r['scheduled_at'] ?? null, $r['status']);
-    $audRow = audience_cell($r['audience_id'] ?? null, $r['audience_name'] ?? null);
-    $tplRow = template_cell($r['template_id'] ?? null, $r['template_name'] ?? null);
 
     $meta = <<<HTML
 <table class="kv meta">
@@ -595,8 +554,6 @@ HTML;
 <tr><th>ID</th><td><code>{$id}</code> · key: <code>{$ikey}</code></td></tr>
 <tr><th>Создано</th><td>{$cr}</td></tr>
 <tr><th>Выполнить</th><td>{$schedRow}</td></tr>
-<tr><th>Сегмент</th><td>{$audRow}</td></tr>
-<tr><th>Шаблон</th><td>{$tplRow}</td></tr>
 <tr><th>Попыток применения</th><td>{$att}</td></tr>
 </table>
 HTML;
@@ -764,6 +721,17 @@ button:hover{filter:brightness(1.1)}
 .aud-line{margin-bottom:10px;font-size:14px}
 .aud-k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin-right:8px}
 .aud-v{color:var(--txt);font-weight:600}
+
+
+.tags-line{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.tagchip{font-size:12px;background:#1b2130;border:1px solid var(--br);color:#cfd6e0;
+  padding:3px 9px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+
+
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--br);border-radius:12px}
+.tbl-scroll .tbl{border:none;border-radius:0;min-width:100%}
+.extra-cell{max-width:260px;white-space:normal;word-break:break-word;font-size:12px;color:#cfd6e0;vertical-align:top}
+.tbl-scroll th{white-space:nowrap}
 
 </style>
 </head>
