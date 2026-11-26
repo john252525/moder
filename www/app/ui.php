@@ -259,10 +259,7 @@ function ui_list(array $q): string
         '' => 'Все',
     ];
 
-    $hoverOn = (bool)(cfg('ui')['email_hover'] ?? true);
-
     $rowsHtml = '';
-    $hoverHtml = '';
     foreach ($rows as $r) {
         $id = (string)$r['id'];
         $tl = cfg('type_labels')[$r['type']] ?? $r['type'];
@@ -273,24 +270,6 @@ function ui_list(array $q): string
         $cb = $canReview
             ? '<input type="checkbox" class="rowcb" name="ids" value="' . e($id) . '" form="bulkForm" onclick="event.stopPropagation()">'
             : '<span class="muted">—</span>';
-
-        // hover-превью для email
-        $hoverAttr = '';
-        if ($hoverOn && $r['type'] === 'email') {
-            $pl = json_decode((string)$r['payload'], true) ?: [];
-            $to = is_array($pl['to'] ?? null) ? implode(', ', array_map('strval', $pl['to'])) : '';
-            $subj = (string)($pl['subject'] ?? '');
-            $from = (string)($pl['from'] ?? '');
-            $body = (string)($pl['body'] ?? '');
-            if ($body === '' && !empty($pl['html'])) { $body = '[HTML-письмо]'; }
-
-
-            $preview = '<div class="hp-row"><span class="hp-k">От</span><span class="hp-v">' . e($from) . '</span></div>'
-                . '<div class="hp-row"><span class="hp-k">Кому</span><span class="hp-v">' . e($to) . '</span></div>'
-                . '<div class="hp-row"><span class="hp-k">Тема</span><span class="hp-v hp-subj">' . e($subj) . '</span></div>'
-                . '<div class="hp-body">' . nl2br(e($body)) . '</div>';
-            $hoverAttr = ' data-hover="' . e($preview) . '"';
-        }
 
         $quick = '';
         if ($canReview) {
@@ -306,7 +285,7 @@ function ui_list(array $q): string
                 . '</div>';
         }
 
-        $rowsHtml .= '<tr class="row' . ($canReview ? ' row-pending' : '') . '" onclick="location.href=\'/item/' . e($id) . '\'"' . $hoverAttr . '>';
+        $rowsHtml .= '<tr class="row' . ($canReview ? ' row-pending' : '') . '" onclick="location.href=\'/item/' . e($id) . '\'">';
         $rowsHtml .= '<td class="cbcell">' . $cb . '</td>';
         $rowsHtml .= '<td>' . $badge . '</td>';
         $rowsHtml .= '<td><span class="tag">' . e($tl) . '</span></td>';
@@ -343,7 +322,8 @@ function ui_list(array $q): string
         $rowsHtml .= '<td class="extra-cell">' . ($fromVal !== '' ? '<span class="clip">' . e($fromVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($toVal !== '' ? '<span class="clip">' . e($toVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '<td class="extra-cell">' . ($subjVal !== '' ? '<span class="clip wide">' . e($subjVal) . '</span>' : '<span class="muted">—</span>') . '</td>';
-        $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? '<span class="clip wide" title="' . e(mb_substr($bodyVal, 0, 500)) . '">' . e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') . '</span>' : '<span class="muted">—</span>') . '</td>';
+        $bodyEsc = e($bodyVal);
+        $rowsHtml .= '<td class="extra-cell">' . ($bodyVal !== '' ? '<span class="clip wide body-preview" data-body="' . e($bodyVal) . '" title="Открыть письмо целиком">' . e(mb_substr($bodyVal, 0, 200)) . (mb_strlen($bodyVal) > 200 ? '…' : '') . '</span>' : '<span class="muted">—</span>') . '</td>';
         $rowsHtml .= '</tr>';
     }
     if ($rowsHtml === '') {
@@ -392,9 +372,6 @@ function ui_list(array $q): string
     $typeOptsHtml = $opt(cfg('types'), $fType, 'Тип: все');
     $agentOptsHtml = $opt($agents, $fAgent, 'Агент: все');
 
-    // hover-модалка и bulk-панель (рендерятся всегда, показываются через JS)
-    $hoverModal = '<div id="hoverCard" class="hovercard" hidden></div>';
-
     $bulkPanel = <<<'BULK'
 <form id="bulkForm" method="post" action="/bulk" class="bulkbar" hidden>
   <div class="bb-left">
@@ -435,9 +412,14 @@ BULK;
   <tbody id="rows">{$rowsHtml}</tbody>
 </table>
 </div>
+<div id="bodyModal" class="modal-back" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-head"><span>Тело письма</span><button type="button" class="modal-x" id="bodyModalClose" aria-label="Закрыть">×</button></div>
+    <div class="modal-body" id="bodyModalText"></div>
+  </div>
+</div>
 {$pager}
 {$bulkPanel}
-{$hoverModal}
 <!-- отдельная форма отклонения для быстрых кнопок -->
 <form id="quickRejectForm" method="post" action="" hidden></form>
 HTML;
@@ -695,15 +677,6 @@ button:hover{filter:brightness(1.1)}
 .bb-right input[type=text]{background:#12151c;border:1px solid var(--br);color:var(--txt);border-radius:9px;padding:8px 12px;font:inherit;min-width:200px}
 .bb-btn{white-space:nowrap}
 .bb-clear{padding:5px 10px;font-size:13px}
-/* hover card */
-.hovercard{position:absolute;z-index:100;max-width:440px;background:#12151c;border:1px solid #313846;border-radius:12px;
-  padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none;font-size:14px}
-.hovercard[hidden]{display:none}
-.hp-row{display:flex;gap:8px;margin-bottom:4px}
-.hp-k{color:var(--mut);width:52px;flex:0 0 52px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
-.hp-v{color:var(--txt);word-break:break-word}
-.hp-subj{font-weight:600}
-.hp-body{margin-top:8px;padding-top:8px;border-top:1px solid var(--br);color:#cfd6e0;max-height:260px;overflow:hidden;white-space:pre-wrap;word-break:break-word;font-size:13px}
 .chip{transition:border-color .15s}.chip:hover{border-color:#3b82f6;text-decoration:none}
 
 
@@ -743,6 +716,18 @@ button:hover{filter:brightness(1.1)}
 /* теги — вертикальным списком, чтобы не растягивать таблицу */
 .extra-cell .taglist{display:flex;flex-direction:column;gap:3px;max-width:340px}
 .extra-cell .tagchip{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* body preview + modal */
+.body-preview{cursor:zoom-in;border-bottom:1px dashed #3b4252}
+.body-preview:hover{border-bottom-color:var(--acc);color:#9ecbff}
+.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-back[hidden]{display:none}
+.modal-box{background:#12151c;border:1px solid #313846;border-radius:14px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--br);font-weight:600;font-size:14px}
+.modal-x{background:none;border:none;color:var(--mut);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px}
+.modal-x:hover{background:#232833;color:var(--txt)}
+.modal-body{padding:16px 18px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.6;color:#cfd6e0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
 </style>
 </head>
@@ -791,28 +776,26 @@ function quickReject(id){
 document.addEventListener('change', function(ev){
   if(ev.target && ev.target.classList && ev.target.classList.contains('rowcb')){ updateBulk(); }
 });
-// hover-превью email
+
+// body modal
 (function(){
-  var card = document.getElementById('hoverCard');
-  if(!card) return;
-  var hoverDelay = null;
-  document.querySelectorAll('#rows tr[data-hover]').forEach(function(tr){
-    tr.addEventListener('mouseenter', function(){
-      hoverDelay = setTimeout(function(){
-        card.innerHTML = tr.getAttribute('data-hover');
-        card.hidden = false;
-        var r = tr.getBoundingClientRect();
-        var top = r.bottom + window.scrollY + 6;
-        var left = r.left + window.scrollX + 40;
-        card.style.top = top + 'px';
-        card.style.left = Math.min(left, window.innerWidth - 470) + 'px';
-      }, 220);
-    });
-    tr.addEventListener('mouseleave', function(){
-      if(hoverDelay){ clearTimeout(hoverDelay); hoverDelay = null; }
-      card.hidden = true;
-    });
+  var back = document.getElementById('bodyModal');
+  if (!back) return;
+  var txt = document.getElementById('bodyModalText');
+  var closeBtn = document.getElementById('bodyModalClose');
+  function close(){ back.hidden = true; txt.textContent = ''; }
+  document.addEventListener('click', function(ev){
+    var el = ev.target.closest && ev.target.closest('.body-preview');
+    if (el) {
+      ev.preventDefault(); ev.stopPropagation();
+      txt.textContent = el.getAttribute('data-body') || '';
+      back.hidden = false;
+      return;
+    }
+    if (ev.target === back) { close(); }
   });
+  if (closeBtn) closeBtn.addEventListener('click', function(e){ e.stopPropagation(); close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !back.hidden) close(); });
 })();
 </script>
 
